@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobTrackr Test Page</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .title {
+            font-size: 2.5em;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .job-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+        
+        .job-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .company {
+            font-size: 1.1em;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .description {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        
+        .requirements {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .requirements h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .requirements ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .requirements li {
+            margin-bottom: 5px;
+            color: #666;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .instructions h3 {
+            margin: 0 0 15px 0;
+            color: #1976d2;
+        }
+        
+        .instructions ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+            color: #333;
+        }
+        
+        .shortcut-test {
+            background: #f3e5f5;
+            border: 1px solid #9c27b0;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .shortcut-test h3 {
+            margin: 0 0 15px 0;
+            color: #7b1fa2;
+        }
+        
+        .shortcut-key {
+            background: #9c27b0;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 1.1em;
+            margin: 0 5px;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        
+        .status.success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 1px solid #4caf50;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="title">JobTrackr Test Page</h1>
+        <p class="subtitle">Test your Chrome extension on this mock job posting</p>
+    </div>
+    
+    <div class="instructions">
+        <h3>🧪 Testing Instructions</h3>
+        <ol>
+            <li>Make sure the JobTrackr extension is loaded in Chrome</li>
+            <li>Try the keyboard shortcut: <span class="shortcut-key">Ctrl+Shift+K</span></li>
+            <li>Click the extension icon to open the popup</li>
+            <li>Click "Open Side Panel" to see the side panel</li>
+            <li>Test capturing this job posting</li>
+        </ol>
+    </div>
+    
+    <div class="job-card">
+        <h2 class="job-title">Senior Software Engineer</h2>
+        <div class="company">TechCorp Inc.</div>
+        <div class="description">
+            We are looking for a passionate Senior Software Engineer to join our growing team. 
+            You will be responsible for designing, developing, and maintaining our core platform 
+            that serves millions of users worldwide.
+        </div>
+        
+        <div class="requirements">
+            <h4>Requirements:</h4>
+            <ul>
+                <li>5+ years of experience in software development</li>
+                <li>Strong proficiency in JavaScript, Python, or Java</li>
+                <li>Experience with cloud platforms (AWS, GCP, or Azure)</li>
+                <li>Knowledge of database design and optimization</li>
+                <li>Experience with microservices architecture</li>
+                <li>Strong problem-solving and communication skills</li>
+            </ul>
+        </div>
+        
+        <div class="shortcut-test">
+            <h3>🎯 Test Keyboard Shortcut</h3>
+            <p>Press <span class="shortcut-key">Ctrl+Shift+K</span> to capture this job!</p>
+            <div id="testStatus" class="status" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <div class="job-card">
+        <h2 class="job-title">Product Manager</h2>
+        <div class="company">StartupXYZ</div>
+        <div class="description">
+            Join our dynamic team as a Product Manager and help shape the future of our platform. 
+            You'll work closely with engineering, design, and business teams to deliver amazing user experiences.
+        </div>
+        
+        <div class="requirements">
+            <h4>Requirements:</h4>
+            <ul>
+                <li>3+ years of product management experience</li>
+                <li>Strong analytical and problem-solving skills</li>
+                <li>Experience with agile development methodologies</li>
+                <li>Excellent communication and leadership skills</li>
+                <li>Technical background preferred</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        // Listen for keyboard shortcut
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.shiftKey && event.key === 'K') {
+                event.preventDefault();
+                showTestStatus('Keyboard shortcut detected! Extension should capture this job.', 'success');
+            }
+        });
+        
+        function showTestStatus(message, type) {
+            const status = document.getElementById('testStatus');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Show page load message
+        window.addEventListener('load', function() {
+            console.log('JobTrackr test page loaded. Ready for testing!');
+        });
+    </script>
+</body>
+</html>
