@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="shared/styles.css">
+  <style>
+    body {
+      width: 300px;
+      padding: 20px;
+    }
+    
+    .header {
+      margin-bottom: 20px;
+    }
+    
+    .logo {
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+    
+    .subtitle {
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">JobTrackr</div>
+    <div class="subtitle">Capture Job Applications</div>
+  </div>
+  
+  <button id="captureBtn" class="button primary">
+    📋 Capture Current Job
+  </button>
+  
+  <button id="openDashboard" class="button">
+    📊 Open Dashboard
+  </button>
+  
+  <div id="status" class="status"></div>
+  
+  <div class="shortcut-info">
+    💡 Use <strong>Ctrl+Shift+K</strong> for quick capture
+  </div>
+  
+  <div class="recent-captures">
+    <div class="recent-title">Recent Captures</div>
+    <div id="recentCaptures">
+      <div class="no-captures">No captures yet</div>
+    </div>
+  </div>
+  
+  <div id="currentUrl" class="current-url"></div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
