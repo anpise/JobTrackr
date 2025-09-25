@@ -1,0 +1,63 @@
+project:
+  name: JobTrackr
+  description: Simple spec to guide CodeRabbit reviews for Chrome extension, FastAPI backend, and (later) React frontend.
+
+review_goals:
+  - Keep PRs small, focused, and easy to test.
+  - Catch obvious bugs and missing validations early.
+  - Ensure basic security and configuration hygiene.
+
+general_checks:
+  - No secrets committed (.env, AWS keys, tokens).
+  - Clear error handling (no bare except; return useful messages).
+  - Input validation present for public APIs and user inputs.
+  - CORS configured only for needed origins.
+  - README or inline notes on how to run/test changes.
+
+chrome_extension:
+  basics:
+    - Manifest V3 present; minimal permissions (activeTab, notifications, storage, scripting).
+    - Keyboard shortcut defined and documented (Ctrl+Shift+K / Cmd+Shift+K).
+    - URL validation (http/https only; block chrome:// and file://).
+    - Backend URL configurable (no hardcoded prod secrets).
+    - User feedback: notification or toast on success/error.
+  files:
+    - manifest.json, background.js, popup.html, popup.js, shared/utils.js, shared/styles.css.
+
+backend:
+  basics:
+    - FastAPI app boots locally (localhost:8000) with /health.
+    - Endpoint POST /api/v1/jobs/capture validates URL and returns job_id.
+    - GET /api/v1/jobs returns list; DB models committed via SQLAlchemy.
+    - Config via .env (DB URL, CORS, Firecrawl key, S3); no secrets in code.
+    - CORS allows localhost frontend and Chrome extension only.
+  code_style:
+    - PEP8, type hints on function signatures where useful, max line length ~100.
+
+frontend:
+  basics:
+    - TypeScript enabled; lightweight structure is fine.
+    - API calls centralized; base URL configurable.
+    - Minimal UI is OK; focus on correctness and no console errors.
+
+what_to_flag:
+  - Missing validation or unchecked external input.
+  - Over-broad Chrome extension permissions.
+  - Hardcoded secrets/URLs that should be env-configured.
+  - Unhandled promise rejections or bare excepts.
+  - DB calls without basic error handling.
+
+severity:
+  critical:
+    - Leaks secrets, disables CORS entirely, or breaks build/run.
+  high:
+    - Missing validation on public endpoints or extension permissions too broad.
+  medium:
+    - Poor error messages/logging, unclear configs.
+  low:
+    - Style and minor nitpicks.
+
+run:
+  on_pr_open: true
+  on_pr_update: true
+  only_changed_files: true
