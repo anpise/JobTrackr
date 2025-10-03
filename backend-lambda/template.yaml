@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: JobTrackr Lambda Backend
+
+Parameters:
+  FirecrawlApiKey:
+    Type: String
+    Description: Firecrawl API key for web scraping
+    NoEcho: true
+  BedrockModelId:
+    Type: String
+    Description: AWS Bedrock model ID
+    Default: us.anthropic.claude-sonnet-4-20250514-v1:0
+  BedrockMaxTokens:
+    Type: String
+    Description: Maximum tokens for Bedrock responses
+    Default: '10000'
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+
+Resources:
+  JobTrackrDependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: jobtrackr-dependencies
+      Description: Dependencies for JobTrackr Lambda
+      ContentUri: dependencies/
+      CompatibleRuntimes:
+        - python3.12
+    Metadata:
+      BuildMethod: python3.12
+
+  JobTrackrFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_function.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - Ref: JobTrackrDependenciesLayer
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Environment:
+        Variables:
+          FIRECRAWL_API_KEY: !Ref FirecrawlApiKey
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          AWS_DEFAULT_REGION: us-east-2
+          BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
+      Events:
+        JobIngest:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+

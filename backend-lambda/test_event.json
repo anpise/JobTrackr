@@ -1,0 +1,16 @@
+{
+  "httpMethod": "POST",
+  "path": "/api/jobs/ingest",
+  "headers": {
+    "Content-Type": "application/json",
+    "Origin": "https://example.com"
+  },
+  "body": "{\"url\": \"https://jobs.ashbyhq.com/notion/f7399542-9122-481a-bf64-43bf8093748b?utm_source=Simplify&ref=Simplify\"}",
+  "isBase64Encoded": false,
+  "requestContext": {
+    "httpMethod": "POST",
+    "path": "/api/jobs/ingest",
+    "requestId": "test-request-id",
+    "stage": "test"
+  }
+}
