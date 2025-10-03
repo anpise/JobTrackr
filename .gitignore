@@ -139,6 +139,7 @@ jspm_packages/
 .yarn-integrity
 
 # dotenv environment variables file
+.claude/
 .env
 .env.test
 .env.production
