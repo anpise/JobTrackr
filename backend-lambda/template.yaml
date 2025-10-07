@@ -15,6 +15,10 @@ Parameters:
     Type: String
     Description: Maximum tokens for Bedrock responses
     Default: '10000'
+  DynamoDBTableName:
+    Type: String
+    Description: DynamoDB table name for jobs
+    Default: UsersJobs
 
 Globals:
   Function:
@@ -22,6 +26,37 @@ Globals:
     MemorySize: 512
 
 Resources:
+  UsersJobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DynamoDBTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
   JobTrackrDependenciesLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -50,12 +85,23 @@ Resources:
               Action:
                 - bedrock:InvokeModel
               Resource: '*'
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource:
+                - !GetAtt UsersJobsTable.Arn
+                - !Sub '${UsersJobsTable.Arn}/index/*'
       Environment:
         Variables:
           FIRECRAWL_API_KEY: !Ref FirecrawlApiKey
           BEDROCK_MODEL_ID: !Ref BedrockModelId
           AWS_DEFAULT_REGION: us-east-2
           BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
+          DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
       Events:
         JobIngest:
           Type: Api
