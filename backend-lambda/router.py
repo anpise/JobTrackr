@@ -12,9 +12,11 @@ def get_route_handler(event: Dict[str, Any]) -> str:
     """
     method = event.get('httpMethod', '').upper()
     path = event.get('path', '')
-    
+
     if method == 'POST' and path == '/api/jobs/ingest':
         return 'job_ingest'
+    elif method == 'GET' and path == '/api/jobs':
+        return 'get_jobs'
     elif method == 'OPTIONS':
         return 'cors_preflight'
     else:

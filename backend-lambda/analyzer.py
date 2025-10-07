@@ -25,20 +25,17 @@ logger.info(f"Bedrock client initialized at module level: {id(bedrock_client)}")
 
 
 class JobAnalysis(BaseModel):
-    """Pydantic model for structured job analysis output"""
+    """Pydantic model for structured job analysis output - matches DynamoDB schema"""
+    # Required fields
     title: str = Field(description="Job title")
     company: str = Field(description="Company name")
-    location: str = Field(description="Job location")
-    description: str = Field(description="Job description")
-    requirements: List[str] = Field(description="List of job requirements")
-    salary_range: Optional[str] = Field(description="Salary range if mentioned", default=None)
-    job_type: str = Field(description="Full-time/Part-time/Contract", default="Unknown")
-    employment_type: str = Field(description="Remote/Hybrid/On-site", default="Unknown")
-    experience_level: str = Field(description="Entry/Mid/Senior/Executive", default="Unknown")
-    skills: List[str] = Field(description="List of required skills", default_factory=list)
-    benefits: List[str] = Field(description="List of benefits", default_factory=list)
-    application_deadline: Optional[str] = Field(description="Application deadline if mentioned", default=None)
-    contact_info: Optional[str] = Field(description="Contact information if available", default=None)
+    location: str = Field(description="Job location (city, state, country, or 'Remote')")
+
+    # Optional fields matching DynamoDB schema
+    salary_range: Optional[str] = Field(description="Compensation range (e.g., '$120k-$180k', '€50k-€70k')", default=None)
+    employment_type: Optional[str] = Field(description="Employment type: Full-time, Part-time, Internship, Contract, Freelance", default=None)
+    source: Optional[str] = Field(description="Job board or source (e.g., LinkedIn, Indeed, Greenhouse, Company Website)", default=None)
+    tags: Optional[List[str]] = Field(description="List of relevant skills, technologies, or keywords (e.g., ['Python', 'AWS', 'React'])", default_factory=list)
 
 
 # Initialize output parser after class definition
@@ -139,14 +136,8 @@ def create_fallback_response() -> Dict[str, Any]:
         "title": "Unknown",
         "company": "Unknown",
         "location": "Unknown",
-        "description": "Could not analyze content",
-        "requirements": [],
         "salary_range": None,
-        "job_type": "Unknown",
-        "employment_type": "Unknown",
-        "experience_level": "Unknown",
-        "skills": [],
-        "benefits": [],
-        "application_deadline": None,
-        "contact_info": None
+        "employment_type": None,
+        "source": None,
+        "tags": []
     }
