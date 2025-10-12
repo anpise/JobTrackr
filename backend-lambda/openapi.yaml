@@ -21,14 +21,10 @@ paths:
               type: object
               required:
                 - url
-                - user_id
               properties:
                 url:
                   type: string
                   example: https://www.linkedin.com/jobs/view/123456789
-                user_id:
-                  type: string
-                  example: user-123
                 resume_url:
                   type: string
                   example: https://example.com/resume.pdf
@@ -55,12 +51,6 @@ paths:
     get:
       summary: Get user's jobs
       parameters:
-        - name: user_id
-          in: query
-          required: true
-          schema:
-            type: string
-          example: user-123
         - name: limit
           in: query
           schema:
