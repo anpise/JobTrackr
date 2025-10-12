@@ -1,0 +1,93 @@
+openapi: 3.0.3
+info:
+  title: JobTrackr API
+  version: 1.0.0
+
+servers:
+  - url: https://your-api-id.execute-api.us-east-1.amazonaws.com/dev
+
+security:
+  - CognitoAuthorizer: []
+
+paths:
+  /api/jobs/ingest:
+    post:
+      summary: Submit a job URL to process
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  example: https://www.linkedin.com/jobs/view/123456789
+                resume_url:
+                  type: string
+                  example: https://example.com/resume.pdf
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  status:
+                    type: string
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+  /api/jobs:
+    get:
+      summary: Get user's jobs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          example: 20
+        - name: last_key
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      type: object
+                  count:
+                    type: integer
+                  next_page_token:
+                    type: string
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Server error
+
+components:
+  securitySchemes:
+    CognitoAuthorizer:
+      type: apiKey
+      name: Authorization
+      in: header
+      x-amazon-apigateway-authtype: cognito_user_pools

@@ -225,7 +225,7 @@ def sanitize_request_data(data: Dict[str, Any]) -> Dict[str, Any]:
     sanitized = {}
     for key, value in data.items():
         # Only allow specific known fields
-        if key not in ['url']:
+        if key not in ['url', 'resume_url']:
             continue
 
         if isinstance(value, str):

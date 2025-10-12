@@ -16,10 +16,27 @@ logger = logging.getLogger(__name__)
 def handle_job_ingest(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Handle job ingest POST requests
-    Expects url and user_id in request body
+    Expects url in request body, user_id from Cognito
     Optional: resume_url
     """
     try:
+        # Extract user_id from Cognito authorizer context
+        user_id = None
+        request_context = event.get('requestContext', {})
+        authorizer = request_context.get('authorizer', {})
+
+        # Log for debugging
+        logger.info(f"Request context: {request_context}")
+        logger.info(f"Authorizer: {authorizer}")
+
+        # Get user_id from Cognito claims
+        if 'claims' in authorizer:
+            user_id = authorizer['claims'].get('sub')  # Cognito user ID
+
+        if not user_id:
+            logger.error(f"No user_id found. Full event: {event}")
+            return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
+
         # Parse request body
         body = parse_request_body(event)
         if not body:
@@ -37,11 +54,6 @@ def handle_job_ingest(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         # Use the validated/sanitized URL
         url = validation_result["url"]
-
-        # Extract user_id (required)
-        user_id = sanitized_body.get('user_id')
-        if not user_id:
-            return create_error_response(400, "user_id is required", "MISSING_USER_ID")
 
         # Extract optional resume_url
         resume_url = sanitized_body.get('resume_url')
@@ -66,18 +78,25 @@ def handle_get_jobs(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Handle GET request to retrieve user's jobs with pagination
     Query parameters:
-        - user_id (required)
         - limit (optional, default: 10, max: 50)
         - last_key (optional, base64 encoded pagination token)
+    User ID is extracted from Cognito authorizer
     """
     try:
+        # Extract user_id from Cognito authorizer context
+        user_id = None
+        request_context = event.get('requestContext', {})
+        authorizer = request_context.get('authorizer', {})
+
+        # Get user_id from Cognito claims
+        if 'claims' in authorizer:
+            user_id = authorizer['claims'].get('sub')  # Cognito user ID
+
+        if not user_id:
+            return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
+
         # Extract query parameters
         params = event.get('queryStringParameters') or {}
-
-        # Get user_id (required)
-        user_id = params.get('user_id')
-        if not user_id:
-            return create_error_response(400, "user_id is required", "MISSING_USER_ID")
 
         # Get limit (optional, default 10, max 50)
         limit = int(params.get('limit', 10))
