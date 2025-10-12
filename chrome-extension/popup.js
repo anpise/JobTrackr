@@ -1,22 +1,27 @@
 // Popup script for JobTrackr Chrome Extension
 
-// Configuration
-const BACKEND_URL = 'http://localhost:8000';
-const DASHBOARD_URL = 'http://localhost:3000';
+// Get configuration from config.js
+const BACKEND_URL = typeof EXTENSION_CONFIG !== 'undefined' ? EXTENSION_CONFIG.API_GATEWAY_URL : '';
+const DASHBOARD_URL = typeof EXTENSION_CONFIG !== 'undefined' ? EXTENSION_CONFIG.DASHBOARD_URL : 'http://localhost:3000';
 
 // DOM elements
 const captureBtn = document.getElementById('captureBtn');
 const openDashboardBtn = document.getElementById('openDashboard');
 const statusDiv = document.getElementById('status');
 const currentUrlDiv = document.getElementById('currentUrl');
-const recentCaptures = document.getElementById('recentCaptures');
+const authSection = document.getElementById('authSection');
+const loggedInSection = document.getElementById('loggedInSection');
+const loggedOutSection = document.getElementById('loggedOutSection');
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const userEmailDiv = document.getElementById('userEmail');
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('Popup loaded, setting up...');
   try {
+    await checkAuthStatus();
     await updateCurrentUrl();
-    await loadRecentCaptures();
     setupEventListeners();
     console.log('Popup setup complete');
   } catch (error) {
@@ -24,21 +29,98 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// Check authentication status
+async function checkAuthStatus() {
+  try {
+    const isAuthenticated = await CognitoAuth.isAuthenticated();
+
+    authSection.style.display = 'block';
+
+    if (isAuthenticated) {
+      // Show logged in state
+      const userInfo = await CognitoAuth.getUserInfo();
+      userEmailDiv.textContent = userInfo?.email || 'User';
+      loggedInSection.style.display = 'block';
+      loggedOutSection.style.display = 'none';
+      captureBtn.classList.remove('disabled');
+    } else {
+      // Show logged out state
+      loggedInSection.style.display = 'none';
+      loggedOutSection.style.display = 'block';
+      captureBtn.classList.add('disabled');
+    }
+  } catch (error) {
+    console.error('Error checking auth status:', error);
+    loggedInSection.style.display = 'none';
+    loggedOutSection.style.display = 'block';
+    captureBtn.classList.add('disabled');
+  }
+}
+
 // Setup event listeners
 function setupEventListeners() {
   console.log('Setting up event listeners...');
+
   if (captureBtn) {
     captureBtn.addEventListener('click', captureCurrentJob);
     console.log('Capture button listener added');
   } else {
     console.error('Capture button not found!');
   }
-  
+
   if (openDashboardBtn) {
     openDashboardBtn.addEventListener('click', openDashboard);
     console.log('Dashboard button listener added');
   } else {
     console.error('Dashboard button not found!');
+  }
+
+  if (loginBtn) {
+    loginBtn.addEventListener('click', handleLogin);
+    console.log('Login button listener added');
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+    console.log('Logout button listener added');
+  }
+}
+
+// Handle login
+async function handleLogin() {
+  try {
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Logging in...';
+
+    const result = await CognitoAuth.login();
+
+    if (result.success) {
+      showStatus('✅ Login successful!', 'success');
+      await checkAuthStatus();
+    } else {
+      showStatus(`❌ Login failed: ${result.error}`, 'error');
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    showStatus('❌ Login failed', 'error');
+  } finally {
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Login with Cognito';
+  }
+}
+
+// Handle logout
+async function handleLogout() {
+  try {
+    const result = await CognitoAuth.logout();
+
+    if (result.success) {
+      showStatus('Logged out successfully', 'success');
+      await checkAuthStatus();
+    }
+  } catch (error) {
+    console.error('Logout error:', error);
+    showStatus('❌ Logout failed', 'error');
   }
 }
 
@@ -59,107 +141,119 @@ function isValidUrl(url) {
 
 async function sendUrlToBackend(url, title = '') {
   try {
-    // Simulate network delay
-    const delay = 1000 + Math.random() * 2000;
-    await new Promise(resolve => setTimeout(resolve, delay));
-    
-    // Simulate random success/failure for testing
-    const shouldSucceed = Math.random() < 0.8; // 80% success rate
-    
-    if (shouldSucceed) {
-      const mockResponse = {
-        success: true,
-        job_id: `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        message: 'Job captured successfully',
-        data: {
-          url: url,
-          title: title,
-          captured_at: new Date().toISOString(),
-          status: 'captured'
-        }
-      };
-      
-      console.log('✅ Mock successful response:', mockResponse);
-      return { success: true, data: mockResponse };
-    } else {
-      const errorMessages = [
-        'Network connection failed',
-        'Backend server is down',
-        'Invalid job URL format',
-        'Rate limit exceeded',
-        'Database connection error'
-      ];
-      
-      const randomError = errorMessages[Math.floor(Math.random() * errorMessages.length)];
-      console.log('❌ Mock error response:', randomError);
-      return { 
-        success: false, 
-        error: randomError 
+    // Get valid ID token (auto-refreshes if needed)
+    const idToken = await CognitoAuth.getValidIdToken();
+
+    if (!idToken) {
+      return {
+        success: false,
+        error: 'Not authenticated. Please login first.'
       };
     }
+
+    // Validate backend URL
+    if (!BACKEND_URL || BACKEND_URL === '') {
+      console.error('Backend URL not configured!');
+      return {
+        success: false,
+        error: 'Backend URL not configured. Please check config.js'
+      };
+    }
+
+    console.log('Sending to backend:', BACKEND_URL);
+
+    // Send request to backend
+    const response = await fetch(`${BACKEND_URL}/api/jobs/ingest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': idToken
+      },
+      body: JSON.stringify({
+        url,
+        title
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Backend error:', response.status, data);
+
+      // Handle 401 (token expired)
+      if (response.status === 401) {
+        return {
+          success: false,
+          error: 'Session expired. Please login again.'
+        };
+      }
+
+      return {
+        success: false,
+        error: data.message || data.error || `HTTP error ${response.status}`
+      };
+    }
+
+    console.log('✅ Job captured successfully:', data);
+    return {
+      success: true,
+      data: data
+    };
   } catch (error) {
     console.error('Unexpected error:', error);
-    return { 
-      success: false, 
-      error: 'Unexpected error occurred' 
+
+    return {
+      success: false,
+      error: `Network error: ${error.message}`
     };
   }
 }
 
-async function saveRecentCapture(url, title) {
-  try {
-    const captures = await chrome.storage.local.get(['recentCaptures']) || { recentCaptures: [] };
-    const recentCaptures = captures.recentCaptures || [];
-    
-    const newCapture = {
-      url: url,
-      title: title,
-      timestamp: Date.now(),
-      date: new Date().toLocaleString()
-    };
-    
-    recentCaptures.unshift(newCapture);
-    
-    // Keep only last 10 captures
-    if (recentCaptures.length > 10) {
-      recentCaptures.splice(10);
-    }
-    
-    await chrome.storage.local.set({ recentCaptures });
-  } catch (error) {
-    console.error('Error saving recent capture:', error);
+
+// Check if URL is likely a job posting
+function isJobUrl(url) {
+  if (!url) return false;
+
+  const urlLower = url.toLowerCase();
+
+  // Check if "jobs" appears anywhere in the URL
+  if (urlLower.includes('jobs')) {
+    return true;
   }
+
+  // Additional job-related keywords
+  const jobKeywords = [
+    'career',
+    'careers',
+    'job',
+    'hiring',
+    'apply',
+    'vacancy',
+    'vacancies',
+    'position',
+    'employment',
+    'opportunities'
+  ];
+
+  return jobKeywords.some(keyword => urlLower.includes(keyword));
 }
 
-async function loadRecentCaptures() {
-  try {
-    const captures = await chrome.storage.local.get(['recentCaptures']) || { recentCaptures: [] };
-    const recentCaptures = captures.recentCaptures || [];
-    
-    if (recentCaptures.length === 0) {
-      recentCaptures.innerHTML = '<div class="no-captures">No captures yet</div>';
-      return;
-    }
-    
-    recentCaptures.innerHTML = recentCaptures.map(capture => `
-      <div class="capture-item">
-        <div style="font-weight: bold; margin-bottom: 4px;">${capture.title}</div>
-        <div style="color: rgba(255, 255, 255, 0.7); font-size: 10px; margin-bottom: 4px;">${capture.url}</div>
-        <div class="capture-time">${capture.date}</div>
-      </div>
-    `).join('');
-  } catch (error) {
-    console.error('Error loading recent captures:', error);
-  }
-}
-
-// Update current URL display
+// Update current URL display and highlight if job URL
 async function updateCurrentUrl() {
   try {
     const tab = await getCurrentTab();
     if (tab && tab.url) {
       currentUrlDiv.textContent = tab.url;
       currentUrlDiv.title = tab.url;
+
+      // Highlight capture button if it's a job URL
+      if (isJobUrl(tab.url)) {
+        captureBtn.classList.add('job-detected');
+        captureBtn.textContent = '✨ Capture This Job!';
+      } else {
+        captureBtn.classList.remove('job-detected');
+        captureBtn.textContent = '📋 Capture Current Job';
+      }
     } else {
       currentUrlDiv.textContent = 'No active tab found';
     }
@@ -194,14 +288,9 @@ async function captureCurrentJob() {
 
     // Send to backend
     const response = await sendUrlToBackend(tab.url, tab.title);
-    
+
     if (response.success) {
       showStatus('✅ Job captured successfully!', 'success');
-      // Save to recent captures
-      await saveRecentCapture(tab.url, tab.title);
-      // Reload recent captures display
-      await loadRecentCaptures();
-      // Update current URL display
       await updateCurrentUrl();
     } else {
       showStatus(`❌ Error: ${response.error}`, 'error');
@@ -211,9 +300,14 @@ async function captureCurrentJob() {
     console.error('Error capturing job:', error);
     showStatus('❌ Failed to capture job', 'error');
   } finally {
-    // Re-enable button
+    // Re-enable button and restore text based on URL
     captureBtn.disabled = false;
-    captureBtn.textContent = '📋 Capture Current Job';
+    const tab = await getCurrentTab();
+    if (tab && isJobUrl(tab.url)) {
+      captureBtn.textContent = '✨ Capture This Job!';
+    } else {
+      captureBtn.textContent = '📋 Capture Current Job';
+    }
   }
 }
 

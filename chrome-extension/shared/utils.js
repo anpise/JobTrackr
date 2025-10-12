@@ -1,13 +1,14 @@
 // Shared utilities for JobTrackr Chrome Extension
 
-// Configuration
+// Configuration - Use EXTENSION_CONFIG if available
 const CONFIG = {
-  BACKEND_URL: 'http://localhost:8000',
-  DASHBOARD_URL: 'http://localhost:3000',
-  API_ENDPOINT: '/api/jobs/capture',
-  SUCCESS_RATE: 0.8, // 80% success rate for dummy responses
-  NETWORK_DELAY_MIN: 1000,
-  NETWORK_DELAY_MAX: 3000
+  get BACKEND_URL() {
+    return typeof EXTENSION_CONFIG !== 'undefined' ? EXTENSION_CONFIG.API_GATEWAY_URL : 'http://localhost:8000';
+  },
+  get DASHBOARD_URL() {
+    return typeof EXTENSION_CONFIG !== 'undefined' ? EXTENSION_CONFIG.DASHBOARD_URL : 'http://localhost:3000';
+  },
+  API_ENDPOINT: '/api/jobs/ingest'
 };
 
 // Error messages for dummy responses
@@ -37,47 +38,82 @@ const Utils = {
     }
   },
 
-  // Send URL to backend (with dummy responses for testing)
+  // Send URL to backend with authentication
   async sendUrlToBackend(url, title = '') {
     try {
-      // Simulate network delay
-      const delay = CONFIG.NETWORK_DELAY_MIN + Math.random() * (CONFIG.NETWORK_DELAY_MAX - CONFIG.NETWORK_DELAY_MIN);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      
-      // Simulate random success/failure for testing
-      const shouldSucceed = Math.random() < CONFIG.SUCCESS_RATE;
-      
-      if (shouldSucceed) {
-        // Simulate successful response
-        const mockResponse = {
-          success: true,
-          job_id: `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          message: 'Job captured successfully',
-          data: {
-            url: url,
-            title: title,
-            captured_at: new Date().toISOString(),
-            status: 'captured'
-          }
-        };
-        
-        console.log('✅ Mock successful response:', mockResponse);
-        return { success: true, data: mockResponse };
-      } else {
-        // Simulate error response
-        const randomError = ERROR_MESSAGES[Math.floor(Math.random() * ERROR_MESSAGES.length)];
-        console.log('❌ Mock error response:', randomError);
-        return { 
-          success: false, 
-          error: randomError 
+      // Check if CognitoAuth is available
+      const auth = typeof CognitoAuth !== 'undefined' ? CognitoAuth : self.CognitoAuth;
+
+      if (!auth) {
+        throw new Error('CognitoAuth not available');
+      }
+
+      // Get valid ID token (auto-refreshes if needed)
+      const idToken = await auth.getValidIdToken();
+
+      if (!idToken) {
+        return {
+          success: false,
+          error: 'Not authenticated. Please login first.'
         };
       }
 
+      // Determine backend URL
+      const backendUrl = CONFIG.BACKEND_URL;
+
+      if (!backendUrl || backendUrl === '') {
+        console.error('Backend URL not configured!');
+        return {
+          success: false,
+          error: 'Backend URL not configured. Please check config.js'
+        };
+      }
+
+      console.log('Sending to backend:', backendUrl);
+
+      // Send request to backend
+      const response = await fetch(`${backendUrl}${CONFIG.API_ENDPOINT}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': idToken
+        },
+        body: JSON.stringify({
+          url,
+          title
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Backend error:', response.status, data);
+
+        // Handle 401 (token expired)
+        if (response.status === 401) {
+          return {
+            success: false,
+            error: 'Session expired. Please login again.'
+          };
+        }
+
+        return {
+          success: false,
+          error: data.message || data.error || `HTTP error ${response.status}`
+        };
+      }
+
+      console.log('✅ Job captured successfully:', data);
+      return {
+        success: true,
+        data: data
+      };
     } catch (error) {
       console.error('Unexpected error:', error);
-      return { 
-        success: false, 
-        error: 'Unexpected error occurred' 
+
+      return {
+        success: false,
+        error: `Network error: ${error.message}`
       };
     }
   },

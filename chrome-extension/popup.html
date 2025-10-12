@@ -5,21 +5,83 @@
   <link rel="stylesheet" href="shared/styles.css">
   <style>
     body {
-      width: 300px;
+      width: 320px;
       padding: 20px;
     }
-    
+
     .header {
       margin-bottom: 20px;
     }
-    
+
     .logo {
       font-size: 24px;
       margin-bottom: 5px;
     }
-    
+
     .subtitle {
       font-size: 12px;
+    }
+
+    .auth-section {
+      margin-bottom: 15px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .user-email {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.9);
+      font-weight: 500;
+    }
+
+    .auth-status {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .login-prompt {
+      text-align: center;
+      padding: 15px;
+      background: rgba(255, 193, 7, 0.1);
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .login-prompt-text {
+      font-size: 13px;
+      margin-bottom: 10px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* Highlight button when job URL detected */
+    .job-detected {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+      animation: pulse 2s ease-in-out infinite;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      transform: scale(1.02);
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      }
+      50% {
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.6);
+      }
     }
   </style>
 </head>
@@ -28,30 +90,47 @@
     <div class="logo">JobTrackr</div>
     <div class="subtitle">Capture Job Applications</div>
   </div>
-  
+
+  <!-- Authentication Section -->
+  <div id="authSection" class="auth-section" style="display: none;">
+    <!-- Logged in state -->
+    <div id="loggedInSection" style="display: none;">
+      <div class="user-info">
+        <div>
+          <div class="user-email" id="userEmail">user@example.com</div>
+          <div class="auth-status">✓ Authenticated</div>
+        </div>
+        <button id="logoutBtn" class="button small">Logout</button>
+      </div>
+    </div>
+
+    <!-- Logged out state -->
+    <div id="loggedOutSection" style="display: none;">
+      <div class="login-prompt">
+        <div class="login-prompt-text">🔐 Please login to capture jobs</div>
+        <button id="loginBtn" class="button primary">Login with Cognito</button>
+      </div>
+    </div>
+  </div>
+
   <button id="captureBtn" class="button primary">
     📋 Capture Current Job
   </button>
-  
+
   <button id="openDashboard" class="button">
     📊 Open Dashboard
   </button>
-  
+
   <div id="status" class="status"></div>
-  
+
   <div class="shortcut-info">
     💡 Use <strong>Ctrl+Shift+K</strong> for quick capture
   </div>
-  
-  <div class="recent-captures">
-    <div class="recent-title">Recent Captures</div>
-    <div id="recentCaptures">
-      <div class="no-captures">No captures yet</div>
-    </div>
-  </div>
-  
+
   <div id="currentUrl" class="current-url"></div>
-  
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
