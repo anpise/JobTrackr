@@ -77,23 +77,25 @@ export const auth = {
   },
 
   /**
-   * Redirect to Cognito login page with PKCE
+   * Redirect to Cognito login page with PKCE (if HTTPS) or without (if HTTP)
    */
   async redirectToLogin(): Promise<void> {
-    // Generate PKCE parameters
-    const codeVerifier = generateRandomString(128);
-    const codeChallenge = await generateCodeChallenge(codeVerifier);
+    // Check if we're in a secure context (HTTPS or localhost)
+    const isSecureContext = window.isSecureContext;
 
-    // Store code verifier for later use in token exchange
-    sessionStorage.setItem('pkce_code_verifier', codeVerifier);
-
-    const cognitoLoginUrl = `https://${COGNITO_DOMAIN}/login?` +
+    let cognitoLoginUrl = `https://${COGNITO_DOMAIN}/login?` +
       `client_id=${CLIENT_ID}&` +
       `response_type=code&` +
       `scope=openid+email+profile&` +
-      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
-      `code_challenge=${codeChallenge}&` +
-      `code_challenge_method=S256`;
+      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+
+    if (isSecureContext) {
+      // Use PKCE for secure contexts
+      const codeVerifier = generateRandomString(128);
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
+      sessionStorage.setItem('pkce_code_verifier', codeVerifier);
+      cognitoLoginUrl += `&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+    }
 
     window.location.href = cognitoLoginUrl;
   },
@@ -108,14 +110,23 @@ export const auth = {
   },
 
   /**
-   * Exchange authorization code for tokens with PKCE (called from callback page)
+   * Exchange authorization code for tokens with optional PKCE (called from callback page)
    */
   async exchangeCodeForTokens(code: string): Promise<boolean> {
     try {
-      // Retrieve the code verifier from sessionStorage
+      // Retrieve the code verifier from sessionStorage (if PKCE was used)
       const codeVerifier = sessionStorage.getItem('pkce_code_verifier');
-      if (!codeVerifier) {
-        throw new Error('Code verifier not found');
+
+      const params: Record<string, string> = {
+        grant_type: 'authorization_code',
+        client_id: CLIENT_ID,
+        code: code,
+        redirect_uri: REDIRECT_URI,
+      };
+
+      // Add code_verifier only if PKCE was used
+      if (codeVerifier) {
+        params.code_verifier = codeVerifier;
       }
 
       const response = await fetch(`https://${COGNITO_DOMAIN}/oauth2/token`, {
@@ -123,13 +134,7 @@ export const auth = {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          client_id: CLIENT_ID,
-          code: code,
-          redirect_uri: REDIRECT_URI,
-          code_verifier: codeVerifier,
-        }),
+        body: new URLSearchParams(params),
       });
 
       if (!response.ok) {
