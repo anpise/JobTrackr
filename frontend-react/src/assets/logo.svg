@@ -1,0 +1,24 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="jGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#336a7d;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3e899c;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="tGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#59a5b7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8ec6d2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- J letter -->
+  <path d="M 8 6 L 8 32 C 8 36 10 38 14 38 C 18 38 20 36 20 32 L 20 28 L 14 28 L 14 32 C 14 33 13.5 33.5 13 33.5 C 12.5 33.5 12 33 12 32 L 12 6 Z"
+        fill="url(#jGradient)"
+        stroke="#2f4e5b"
+        stroke-width="0.5"/>
+
+  <!-- T letter -->
+  <path d="M 22 6 L 22 12 L 28 12 L 28 42 L 42 42 L 42 12 L 48 12 L 48 6 Z"
+        fill="url(#tGradient)"
+        stroke="#2f4e5b"
+        stroke-width="0.5"/>
+</svg>
