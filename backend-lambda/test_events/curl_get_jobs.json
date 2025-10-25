@@ -1,0 +1,37 @@
+{
+  "description": "Get Jobs API - GET /api/jobs",
+  "curl_command": "curl -X GET 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/api/jobs?limit=10' -H 'Authorization: Bearer YOUR_COGNITO_JWT_TOKEN'",
+  "test_event": {
+    "httpMethod": "GET",
+    "path": "/api/jobs",
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://example.com",
+      "Authorization": "Bearer test-token"
+    },
+    "queryStringParameters": {
+      "limit": "10"
+    },
+    "isBase64Encoded": false,
+    "requestContext": {
+      "httpMethod": "GET",
+      "path": "/api/jobs",
+      "requestId": "test-get-request-id",
+      "stage": "test",
+      "authorizer": {
+        "claims": {
+          "sub": "test-user-123",
+          "email": "testuser@example.com",
+          "cognito:username": "testuser"
+        }
+      }
+    }
+  },
+  "expected_response": {
+    "statusCode": 200,
+    "body": {
+      "jobs": [],
+      "count": 0
+    }
+  }
+}

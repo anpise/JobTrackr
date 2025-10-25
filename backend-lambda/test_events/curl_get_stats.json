@@ -1,0 +1,37 @@
+{
+  "description": "Get Stats API - GET /api/stats",
+  "curl_command": "curl -X GET 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/api/stats' -H 'Authorization: Bearer YOUR_COGNITO_JWT_TOKEN'",
+  "test_event": {
+    "httpMethod": "GET",
+    "path": "/api/stats",
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://example.com",
+      "Authorization": "Bearer test-token"
+    },
+    "isBase64Encoded": false,
+    "requestContext": {
+      "httpMethod": "GET",
+      "path": "/api/stats",
+      "requestId": "test-stats-request-id",
+      "stage": "test",
+      "authorizer": {
+        "claims": {
+          "sub": "test-user-123",
+          "email": "testuser@example.com",
+          "cognito:username": "testuser"
+        }
+      }
+    }
+  },
+  "expected_response": {
+    "statusCode": 200,
+    "body": {
+      "total_jobs": 0,
+      "status_breakdown": {},
+      "company_breakdown": {},
+      "recent_activity": [],
+      "application_trends": {}
+    }
+  }
+}
