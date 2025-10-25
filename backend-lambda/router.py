@@ -17,6 +17,8 @@ def get_route_handler(event: Dict[str, Any]) -> str:
         return 'job_ingest'
     elif method == 'GET' and path == '/api/jobs':
         return 'get_jobs'
+    elif method == 'GET' and path == '/api/stats':
+        return 'get_stats'
     elif method == 'PUT' and path.startswith('/api/jobs/'):
         return 'update_job'
     elif method == 'DELETE' and path.startswith('/api/jobs/'):

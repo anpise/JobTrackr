@@ -1,0 +1,37 @@
+{
+  "description": "Delete Job API - DELETE /api/jobs/{job_id}",
+  "curl_command": "curl -X DELETE 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/api/jobs/7105d79844e2?applied_ts=2025-10-12T15:41:37.926992+00:00' -H 'Authorization: Bearer YOUR_COGNITO_JWT_TOKEN'",
+  "test_event": {
+    "httpMethod": "DELETE",
+    "path": "/api/jobs/7105d79844e2",
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://example.com",
+      "Authorization": "Bearer test-token"
+    },
+    "queryStringParameters": {
+      "applied_ts": "2025-10-12T15:41:37.926992+00:00"
+    },
+    "isBase64Encoded": false,
+    "requestContext": {
+      "httpMethod": "DELETE",
+      "path": "/api/jobs/7105d79844e2",
+      "requestId": "test-delete-request-id",
+      "stage": "test",
+      "authorizer": {
+        "claims": {
+          "sub": "test-user-123",
+          "email": "testuser@example.com",
+          "cognito:username": "testuser"
+        }
+      }
+    }
+  },
+  "expected_response": {
+    "statusCode": 200,
+    "body": {
+      "message": "Job deleted successfully",
+      "job_id": "7105d79844e2"
+    }
+  }
+}

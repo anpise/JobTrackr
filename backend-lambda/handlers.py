@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 from utils import create_response, create_error_response, create_success_response, parse_request_body, validate_url_input, sanitize_request_data
 from processor import process_job
-from db import get_user_jobs, delete_job, update_job
+from db import get_user_jobs, delete_job, update_job, get_user_job_stats
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +253,35 @@ def handle_delete_job(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Error deleting job: {str(e)}", exc_info=True)
+        return create_error_response(500, "Internal server error", "INTERNAL_ERROR")
+
+
+def handle_get_stats(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Handle GET request to retrieve user's job statistics
+    Path: /api/stats
+    Uses dedicated optimized database query for stats
+    """
+    try:
+        # Extract user_id from Cognito authorizer context
+        user_id = None
+        request_context = event.get('requestContext', {})
+        authorizer = request_context.get('authorizer', {})
+
+        # Get user_id from Cognito claims
+        if 'claims' in authorizer:
+            user_id = authorizer['claims'].get('sub')  # Cognito user ID
+
+        if not user_id:
+            return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
+
+        # Get job statistics using dedicated optimized query
+        stats = get_user_job_stats(user_id)
+
+        return create_success_response(stats)
+
+    except Exception as e:
+        logger.error(f"Error retrieving job stats: {str(e)}", exc_info=True)
         return create_error_response(500, "Internal server error", "INTERNAL_ERROR")
 
 

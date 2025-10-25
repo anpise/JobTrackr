@@ -394,3 +394,98 @@ def delete_job(user_id: str, job_id: str, applied_ts: str) -> bool:
     except ClientError as e:
         logger.error(f"Failed to delete job: {str(e)}", exc_info=True)
         return False
+
+
+def get_user_job_stats(user_id: str) -> Dict[str, Any]:
+    """
+    Get job application statistics for a user
+    Optimized query that only fetches necessary fields for stats calculation
+    
+    Returns:
+        Dictionary containing various job statistics
+    """
+    try:
+        # Query with projection to only get fields needed for stats
+        response = table.query(
+            IndexName='UserIndex',
+            KeyConditionExpression='user_id = :user_id',
+            ProjectionExpression='job_id, #status, company, position, applied_ts, created_at',
+            ExpressionAttributeNames={
+                '#status': 'status'
+            },
+            ExpressionAttributeValues={
+                ':user_id': user_id
+            }
+        )
+        
+        jobs = response.get('Items', [])
+        
+        if not jobs:
+            return {
+                'total_jobs': 0,
+                'status_breakdown': {},
+                'company_breakdown': {},
+                'recent_activity': [],
+                'application_trends': {}
+            }
+        
+        # Calculate statistics
+        total_jobs = len(jobs)
+        status_breakdown = {}
+        company_breakdown = {}
+        recent_activity = []
+        
+        # Process each job
+        for job in jobs:
+            # Status breakdown
+            status = job.get('status', 'Unknown')
+            status_breakdown[status] = status_breakdown.get(status, 0) + 1
+            
+            # Company breakdown
+            company = job.get('company', 'Unknown')
+            company_breakdown[company] = company_breakdown.get(company, 0) + 1
+            
+            # Recent activity (last 10 jobs by applied_ts)
+            recent_activity.append({
+                'job_id': job.get('job_id'),
+                'company': company,
+                'position': job.get('position', 'Unknown'),
+                'status': status,
+                'applied_ts': job.get('applied_ts'),
+                'created_at': job.get('created_at')
+            })
+        
+        # Sort recent activity by applied_ts (most recent first)
+        recent_activity.sort(key=lambda x: x.get('applied_ts', ''), reverse=True)
+        recent_activity = recent_activity[:10]
+        
+        # Calculate application trends (jobs per month)
+        application_trends = {}
+        for job in jobs:
+            applied_ts = job.get('applied_ts', '')
+            if applied_ts:
+                # Extract year-month from timestamp
+                try:
+                    # Assuming applied_ts is in format "2025-10-12T15:41:37.926992+00:00"
+                    year_month = applied_ts[:7]  # "2025-10"
+                    application_trends[year_month] = application_trends.get(year_month, 0) + 1
+                except:
+                    continue
+        
+        return {
+            'total_jobs': total_jobs,
+            'status_breakdown': status_breakdown,
+            'company_breakdown': company_breakdown,
+            'recent_activity': recent_activity,
+            'application_trends': application_trends
+        }
+        
+    except ClientError as e:
+        logger.error(f"Failed to get job stats: {str(e)}", exc_info=True)
+        return {
+            'total_jobs': 0,
+            'status_breakdown': {},
+            'company_breakdown': {},
+            'recent_activity': [],
+            'application_trends': {}
+        }

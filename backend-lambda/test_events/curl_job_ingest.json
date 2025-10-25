@@ -1,0 +1,35 @@
+{
+  "description": "Job Ingest API - POST /api/jobs/ingest",
+  "curl_command": "curl -X POST 'https://your-api-id.execute-api.us-east-1.amazonaws.com/dev/api/jobs/ingest' -H 'Content-Type: application/json' -H 'Authorization: Bearer YOUR_COGNITO_JWT_TOKEN' -d '{\"url\": \"https://jobs.ashbyhq.com/notion/f7399542-9122-481a-bf64-43bf8093748b\"}'",
+  "test_event": {
+    "httpMethod": "POST",
+    "path": "/api/jobs/ingest",
+    "headers": {
+      "Content-Type": "application/json",
+      "Origin": "https://example.com",
+      "Authorization": "Bearer test-token"
+    },
+    "body": "{\"url\": \"https://jobs.ashbyhq.com/notion/f7399542-9122-481a-bf64-43bf8093748b\"}",
+    "isBase64Encoded": false,
+    "requestContext": {
+      "httpMethod": "POST",
+      "path": "/api/jobs/ingest",
+      "requestId": "test-request-id",
+      "stage": "test",
+      "authorizer": {
+        "claims": {
+          "sub": "test-user-123",
+          "email": "testuser@example.com",
+          "cognito:username": "testuser"
+        }
+      }
+    }
+  },
+  "expected_response": {
+    "statusCode": 200,
+    "body": {
+      "message": "Job URL processed successfully",
+      "status": "completed"
+    }
+  }
+}

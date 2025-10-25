@@ -1,0 +1,23 @@
+{
+  "httpMethod": "GET",
+  "path": "/api/stats",
+  "headers": {
+    "Content-Type": "application/json",
+    "Origin": "https://example.com",
+    "Authorization": "Bearer test-token"
+  },
+  "isBase64Encoded": false,
+  "requestContext": {
+    "httpMethod": "GET",
+    "path": "/api/stats",
+    "requestId": "test-stats-request-id",
+    "stage": "test",
+    "authorizer": {
+      "claims": {
+        "sub": "test-user-123",
+        "email": "testuser@example.com",
+        "cognito:username": "testuser"
+      }
+    }
+  }
+}
