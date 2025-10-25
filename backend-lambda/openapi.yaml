@@ -1,88 +1,197 @@
 openapi: 3.0.3
 info:
   title: JobTrackr API
-  version: 1.0.0
+  description: Job application tracking and management API with AI-powered job analysis
+  version: 2.0.0
+  contact:
+    name: JobTrackr Support
+    email: support@jobtrackr.com
 
 servers:
-  - url: https://your-api-id.execute-api.us-east-1.amazonaws.com/dev
+  - url: https://bibm9nedn4.execute-api.us-east-1.amazonaws.com/dev
+    description: Production API
+  - url: http://127.0.0.1:3000
+    description: Local development (SAM)
 
 security:
   - CognitoAuthorizer: []
 
+tags:
+  - name: Jobs
+    description: Job application management endpoints
+
 paths:
   /api/jobs/ingest:
     post:
-      summary: Submit a job URL to process
+      tags:
+        - Jobs
+      summary: Ingest and analyze a job posting URL
+      description: Submit a job URL for scraping and AI-powered analysis. The system will extract job details using Claude Haiku 4.5.
+      operationId: ingestJob
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - url
-              properties:
-                url:
-                  type: string
-                  example: https://www.linkedin.com/jobs/view/123456789
-                resume_url:
-                  type: string
-                  example: https://example.com/resume.pdf
+              $ref: '#/components/schemas/IngestJobRequest'
+            examples:
+              linkedin:
+                summary: LinkedIn job posting
+                value:
+                  url: https://www.linkedin.com/jobs/view/3847562941
+                  resume_url: https://s3.amazonaws.com/bucket/resume.pdf
+              indeed:
+                summary: Indeed job posting
+                value:
+                  url: https://www.indeed.com/viewjob?jk=abc123def456
       responses:
         '200':
-          description: Success
+          description: Job successfully ingested and analyzed
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  status:
-                    type: string
+                $ref: '#/components/schemas/IngestJobResponse'
+              example:
+                message: Job URL processed successfully
+                status: completed
         '400':
-          description: Bad request
+          $ref: '#/components/responses/BadRequest'
         '401':
-          description: Unauthorized
+          $ref: '#/components/responses/Unauthorized'
         '500':
-          description: Server error
+          $ref: '#/components/responses/InternalServerError'
 
   /api/jobs:
     get:
-      summary: Get user's jobs
+      tags:
+        - Jobs
+      summary: Get user's job applications
+      description: Retrieve a paginated list of job applications for the authenticated user
+      operationId: getJobs
       parameters:
         - name: limit
           in: query
+          description: Maximum number of jobs to return (1-50)
+          required: false
           schema:
             type: integer
+            minimum: 1
+            maximum: 50
             default: 10
           example: 20
         - name: last_key
           in: query
+          description: Base64-encoded pagination token from previous response
+          required: false
           schema:
             type: string
+          example: eyJQSyI6IlVTRVIjMTIzIiwiU0siOiJKT0IjMjAyNS0wMS0xNSJ9
       responses:
         '200':
-          description: Success
+          description: Successfully retrieved job applications
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  jobs:
-                    type: array
-                    items:
-                      type: object
-                  count:
-                    type: integer
-                  next_page_token:
-                    type: string
+                $ref: '#/components/schemas/GetJobsResponse'
         '400':
-          description: Bad request
+          $ref: '#/components/responses/BadRequest'
         '401':
-          description: Unauthorized
+          $ref: '#/components/responses/Unauthorized'
         '500':
-          description: Server error
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/jobs/{job_id}:
+    put:
+      tags:
+        - Jobs
+      summary: Update a job application
+      description: Update job status, notes, or other fields
+      operationId: updateJob
+      parameters:
+        - name: job_id
+          in: path
+          description: Unique job identifier
+          required: true
+          schema:
+            type: string
+          example: abc123def456
+        - name: applied_ts
+          in: query
+          description: ISO 8601 timestamp when the job was applied to
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2025-01-15T10:30:00.000Z"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateJobRequest'
+            examples:
+              updateStatus:
+                summary: Update job status
+                value:
+                  status: Interview
+              updateNotes:
+                summary: Add notes
+                value:
+                  notes: Phone screen scheduled for next Tuesday
+              updateBoth:
+                summary: Update status and notes
+                value:
+                  status: Offer
+                  notes: Received offer - $150k base + equity
+      responses:
+        '200':
+          description: Job successfully updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Jobs
+      summary: Delete a job application
+      description: Permanently delete a job application from the database
+      operationId: deleteJob
+      parameters:
+        - name: job_id
+          in: path
+          description: Unique job identifier
+          required: true
+          schema:
+            type: string
+          example: abc123def456
+        - name: applied_ts
+          in: query
+          description: ISO 8601 timestamp when the job was applied to
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2025-01-15T10:30:00.000Z"
+      responses:
+        '200':
+          description: Job successfully deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteJobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
 
 components:
   securitySchemes:
@@ -90,4 +199,228 @@ components:
       type: apiKey
       name: Authorization
       in: header
+      description: Cognito ID token from authentication
       x-amazon-apigateway-authtype: cognito_user_pools
+
+  schemas:
+    IngestJobRequest:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Job posting URL to scrape and analyze
+          example: https://www.linkedin.com/jobs/view/3847562941
+        resume_url:
+          type: string
+          format: uri
+          description: Optional S3 URL of user's resume for matching
+          example: https://s3.amazonaws.com/bucket/resume.pdf
+
+    IngestJobResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Job URL processed successfully
+        status:
+          type: string
+          enum: [completed, failed]
+          example: completed
+
+    JobApplication:
+      type: object
+      properties:
+        job_id:
+          type: string
+          description: Unique job identifier
+          example: abc123def456
+        user_id:
+          type: string
+          description: User identifier from Cognito
+          example: us-east-1:12345678-1234-1234-1234-123456789012
+        company:
+          type: string
+          description: Company name
+          example: Snowflake
+        title:
+          type: string
+          description: Job title
+          example: Software Engineer - Backend
+        location:
+          type: string
+          description: Job location
+          example: Menlo Park, California, United States
+        status:
+          type: string
+          description: Application status
+          enum: [Captured, Applied, Interview, Offer, Rejected]
+          example: Applied
+        applied_ts:
+          type: string
+          format: date-time
+          description: Timestamp when job was applied to
+          example: "2025-01-15T10:30:00.000Z"
+        last_updated_ts:
+          type: string
+          format: date-time
+          description: Timestamp of last update
+          example: "2025-01-15T14:20:00.000Z"
+        job_url:
+          type: string
+          format: uri
+          description: Original job posting URL
+          example: https://www.linkedin.com/jobs/view/3847562941
+        salary_range:
+          type: string
+          description: Salary range
+          example: "$157,000 - $230,000"
+        employment_type:
+          type: string
+          description: Employment type
+          example: Full-time
+        source:
+          type: string
+          description: Job board source
+          example: LinkedIn
+        tags:
+          type: array
+          description: Skills and keywords
+          items:
+            type: string
+          example: [Python, AWS, Docker, Kubernetes]
+        notes:
+          type: string
+          description: User notes
+          example: Great company culture, strong engineering team
+        type:
+          type: string
+          description: Entity type (always "JOB")
+          example: JOB
+        PK:
+          type: string
+          description: DynamoDB partition key
+          example: "USER#us-east-1:12345678"
+        SK:
+          type: string
+          description: DynamoDB sort key
+          example: "JOB#2025-01-15T10:30:00.000Z#abc123def456"
+        GSI1PK:
+          type: string
+          description: GSI1 partition key
+          example: "USER#us-east-1:12345678"
+        GSI1SK:
+          type: string
+          description: GSI1 sort key
+          example: "COMPANY#Snowflake#2025-01-15T10:30:00.000Z#abc123def456"
+
+    GetJobsResponse:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobApplication'
+        count:
+          type: integer
+          description: Number of jobs returned
+          example: 10
+        next_page_token:
+          type: string
+          description: Base64-encoded token for next page
+          example: eyJQSyI6IlVTRVIjMTIzIiwiU0siOiJKT0IjMjAyNS0wMS0xNSJ9
+
+    UpdateJobRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          description: New job status
+          enum: [Captured, Applied, Interview, Offer, Rejected]
+          example: Interview
+        notes:
+          type: string
+          description: User notes
+          example: Phone screen scheduled for next Tuesday
+        resume_url:
+          type: string
+          format: uri
+          description: S3 URL of resume
+          example: https://s3.amazonaws.com/bucket/resume.pdf
+
+    UpdateJobResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Job updated successfully
+        job_id:
+          type: string
+          example: abc123def456
+        updated_fields:
+          type: array
+          items:
+            type: string
+          example: [status, notes]
+
+    DeleteJobResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Job deleted successfully
+        job_id:
+          type: string
+          example: abc123def456
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: Invalid request body
+        code:
+          type: string
+          description: Error code
+          example: INVALID_BODY
+        statusCode:
+          type: integer
+          description: HTTP status code
+          example: 400
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid request body
+            code: INVALID_BODY
+            statusCode: 400
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Unauthorized - No user ID found
+            code: UNAUTHORIZED
+            statusCode: 401
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Internal server error
+            code: INTERNAL_ERROR
+            statusCode: 500

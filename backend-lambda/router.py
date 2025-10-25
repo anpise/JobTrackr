@@ -17,6 +17,10 @@ def get_route_handler(event: Dict[str, Any]) -> str:
         return 'job_ingest'
     elif method == 'GET' and path == '/api/jobs':
         return 'get_jobs'
+    elif method == 'PUT' and path.startswith('/api/jobs/'):
+        return 'update_job'
+    elif method == 'DELETE' and path.startswith('/api/jobs/'):
+        return 'delete_job'
     elif method == 'OPTIONS':
         return 'cors_preflight'
     else:
