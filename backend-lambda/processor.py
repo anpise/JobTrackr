@@ -60,7 +60,7 @@ def process_job(url: str, user_id: str, resume_url: Optional[str] = None) -> Dic
             job_url=url,
             analyzed_data=analyzed_data,
             resume_url=resume_url,
-            status="Captured"
+            status="Applied"
         )
 
         # Step 5: Store in DynamoDB

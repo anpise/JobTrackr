@@ -8,14 +8,30 @@ Parameters:
     Description: Firecrawl API key for web scraping
     NoEcho: true
     Default: 'dummy-key'
+  LLMProvider:
+    Type: String
+    Description: LLM Provider (anthropic or bedrock)
+    Default: 'anthropic'
+    AllowedValues:
+      - anthropic
+      - bedrock
+  AnthropicApiKey:
+    Type: String
+    Description: Anthropic API key (required if LLMProvider is anthropic)
+    NoEcho: true
+    Default: ''
+  AnthropicModelId:
+    Type: String
+    Description: Anthropic model ID
+    Default: 'claude-haiku-4-5-20251001'
   BedrockModelId:
     Type: String
-    Description: AWS Bedrock model ID
-    Default: us.anthropic.claude-sonnet-4-20250514-v1:0
-  BedrockMaxTokens:
+    Description: AWS Bedrock model ID (required if LLMProvider is bedrock)
+    Default: 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
+  MaxTokens:
     Type: String
-    Description: Maximum tokens for Bedrock responses
-    Default: '10000'
+    Description: Maximum tokens for LLM responses
+    Default: '2000'
 
 Globals:
   Function:
@@ -54,9 +70,12 @@ Resources:
       Environment:
         Variables:
           FIRECRAWL_API_KEY: !Ref FirecrawlApiKey
+          LLM_PROVIDER: !Ref LLMProvider
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+          ANTHROPIC_MODEL_ID: !Ref AnthropicModelId
           BEDROCK_MODEL_ID: !Ref BedrockModelId
           AWS_DEFAULT_REGION: us-east-1
-          BEDROCK_MAX_TOKENS: !Ref BedrockMaxTokens
+          MAX_TOKENS: !Ref MaxTokens
       Events:
         JobIngest:
           Type: Api

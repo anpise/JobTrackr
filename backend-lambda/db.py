@@ -98,12 +98,15 @@ def create_job_item(
     if analyzed_data.get('tags'):
         item['tags'] = analyzed_data['tags']
 
+    # Notes field - use analyzer's notes if available, otherwise use user-provided notes
+    if analyzed_data.get('notes'):
+        item['notes'] = analyzed_data['notes']
+    elif notes:
+        item['notes'] = notes
+
     # Optional user-provided fields
     if resume_url:
         item['resume_url'] = resume_url
-
-    if notes:
-        item['notes'] = notes
 
     return item
 
@@ -301,6 +304,69 @@ def update_job_resume(
         return True
     except ClientError as e:
         logger.error(f"Failed to update resume URL: {str(e)}", exc_info=True)
+        return False
+
+
+def update_job(
+    user_id: str,
+    job_id: str,
+    applied_ts: str,
+    updates: Dict[str, Any]
+) -> bool:
+    """
+    Update a job with multiple fields
+
+    Args:
+        user_id: User identifier
+        job_id: Job identifier
+        applied_ts: ISO timestamp
+        updates: Dictionary of fields to update (status, notes, etc.)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Build update expression dynamically
+        update_expr_parts = []
+        expr_attr_names = {}
+        expr_attr_values = {}
+
+        # Always update last_updated_ts
+        update_expr_parts.append('last_updated_ts = :updated')
+        expr_attr_values[':updated'] = datetime.now(timezone.utc).isoformat()
+
+        # Add other fields to update
+        allowed_fields = ['status', 'notes', 'resume_url']
+        for field, value in updates.items():
+            if field in allowed_fields and value is not None:
+                update_expr_parts.append(f'#{field} = :{field}')
+                expr_attr_names[f'#{field}'] = field
+                expr_attr_values[f':{field}'] = value
+
+        if len(update_expr_parts) == 1:
+            logger.warning("No valid fields to update")
+            return False
+
+        update_expr = 'SET ' + ', '.join(update_expr_parts)
+
+        # Perform update
+        update_params = {
+            'Key': {
+                'PK': f'USER#{user_id}',
+                'SK': f'JOB#{applied_ts}#{job_id}'
+            },
+            'UpdateExpression': update_expr,
+            'ExpressionAttributeValues': expr_attr_values
+        }
+
+        if expr_attr_names:
+            update_params['ExpressionAttributeNames'] = expr_attr_names
+
+        table.update_item(**update_params)
+        logger.info(f"Updated job {job_id} with fields: {list(updates.keys())}")
+        return True
+    except ClientError as e:
+        logger.error(f"Failed to update job: {str(e)}", exc_info=True)
         return False
 
 

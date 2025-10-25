@@ -29,7 +29,7 @@ def parse_request_body(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
 
-def create_response(status_code: int, data: Dict[str, Any], cors_headers: bool = False) -> Dict[str, Any]:
+def create_response(status_code: int, data: Dict[str, Any], cors_headers: bool = True) -> Dict[str, Any]:
     """
     Create standardized Lambda response with consistent structure
     All responses include timestamp and request_id for traceability
@@ -41,8 +41,8 @@ def create_response(status_code: int, data: Dict[str, Any], cors_headers: bool =
     if cors_headers:
         headers.update({
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS'
+            'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
         })
 
     # Standardize response structure

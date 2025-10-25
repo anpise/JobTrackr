@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 from utils import create_response, create_error_response, create_success_response, parse_request_body, validate_url_input, sanitize_request_data
 from processor import process_job
-from db import get_user_jobs
+from db import get_user_jobs, delete_job, update_job
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,121 @@ def handle_get_jobs(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         return create_error_response(400, "Invalid parameter value", "INVALID_PARAMETER")
     except Exception as e:
         logger.error(f"Error retrieving jobs: {str(e)}", exc_info=True)
+        return create_error_response(500, "Internal server error", "INTERNAL_ERROR")
+
+
+def handle_update_job(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Handle PUT request to update a job
+    Path: /api/jobs/{job_id}?applied_ts={timestamp}
+    Body: { "status": "...", "notes": "..." }
+    """
+    try:
+        # Extract user_id from Cognito authorizer context
+        user_id = None
+        request_context = event.get('requestContext', {})
+        authorizer = request_context.get('authorizer', {})
+
+        # Get user_id from Cognito claims
+        if 'claims' in authorizer:
+            user_id = authorizer['claims'].get('sub')
+
+        if not user_id:
+            return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
+
+        # Extract job_id from path
+        path = event.get('path', '')
+        job_id = path.split('/')[-1]
+
+        if not job_id:
+            return create_error_response(400, "Job ID is required", "MISSING_JOB_ID")
+
+        # Extract applied_ts from query parameters
+        params = event.get('queryStringParameters') or {}
+        applied_ts = params.get('applied_ts')
+
+        if not applied_ts:
+            return create_error_response(400, "applied_ts query parameter is required", "MISSING_APPLIED_TS")
+
+        # Parse request body
+        body = parse_request_body(event)
+        if not body:
+            return create_error_response(400, "Invalid request body", "INVALID_BODY")
+
+        # Extract fields to update (status, notes, resume_url)
+        updates = {}
+        if 'status' in body:
+            updates['status'] = body['status']
+        if 'notes' in body:
+            updates['notes'] = body['notes']
+        if 'resume_url' in body:
+            updates['resume_url'] = body['resume_url']
+
+        if not updates:
+            return create_error_response(400, "No valid fields to update", "NO_UPDATES")
+
+        # Update the job
+        success = update_job(user_id, job_id, applied_ts, updates)
+
+        if success:
+            return create_success_response({
+                "message": "Job updated successfully",
+                "job_id": job_id,
+                "updated_fields": list(updates.keys())
+            })
+        else:
+            return create_error_response(500, "Failed to update job", "UPDATE_FAILED")
+
+    except Exception as e:
+        logger.error(f"Error updating job: {str(e)}", exc_info=True)
+        return create_error_response(500, "Internal server error", "INTERNAL_ERROR")
+
+
+def handle_delete_job(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Handle DELETE request to delete a job
+    Path: /api/jobs/{job_id}?applied_ts={timestamp}
+    """
+    try:
+        # Extract user_id from Cognito authorizer context
+        user_id = None
+        request_context = event.get('requestContext', {})
+        authorizer = request_context.get('authorizer', {})
+
+        # Get user_id from Cognito claims
+        if 'claims' in authorizer:
+            user_id = authorizer['claims'].get('sub')
+
+        if not user_id:
+            return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
+
+        # Extract job_id from path
+        path = event.get('path', '')
+        job_id = path.split('/')[-1]
+
+        if not job_id:
+            return create_error_response(400, "Job ID is required", "MISSING_JOB_ID")
+
+        # Extract applied_ts from query parameters
+        params = event.get('queryStringParameters') or {}
+        applied_ts = params.get('applied_ts')
+
+        if not applied_ts:
+            return create_error_response(400, "applied_ts query parameter is required", "MISSING_APPLIED_TS")
+
+        # Delete the job
+        success = delete_job(user_id, job_id, applied_ts)
+
+        if success:
+            return create_success_response({
+                "message": "Job deleted successfully",
+                "job_id": job_id
+            })
+        else:
+            return create_error_response(500, "Failed to delete job", "DELETE_FAILED")
+
+    except Exception as e:
+        logger.error(f"Error deleting job: {str(e)}", exc_info=True)
         return create_error_response(500, "Internal server error", "INTERNAL_ERROR")
 
 
