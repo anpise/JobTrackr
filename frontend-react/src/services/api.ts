@@ -17,6 +17,7 @@ export interface JobApplication {
   employment_type?: string;
   tags?: string[];
   notes?: string;
+  resume_url?: string;
   type: string;
   PK: string;
   SK: string;
@@ -35,10 +36,31 @@ export interface IngestJobResponse {
   job_id?: string;
 }
 
+export interface UpdateJobRequest {
+  status?: string;
+  notes?: string;
+  resume_url?: string;
+}
+
 export interface GetJobsResponse {
   jobs: JobApplication[];
   count: number;
   next_page_token?: string;
+}
+
+export interface JobStats {
+  total_jobs: number;
+  status_breakdown: Record<string, number>;
+  company_breakdown: Record<string, number>;
+  recent_activity: Array<{
+    job_id: string;
+    company: string;
+    position: string;
+    status: string;
+    applied_ts: string;
+    created_at: string;
+  }>;
+  application_trends: Record<string, number>;
 }
 
 class ApiService {
@@ -48,12 +70,24 @@ class ApiService {
   private getAuthHeader(): HeadersInit {
     const token = localStorage.getItem('id_token');
     if (!token) {
+      // Clear any stale tokens and redirect to login
+      this.handleAuthError();
       throw new Error('No id token found');
     }
     return {
       'Authorization': token,
       'Content-Type': 'application/json'
     };
+  }
+
+  /**
+   * Handle authentication errors by clearing tokens and redirecting
+   */
+  private handleAuthError(): void {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('id_token');
+    localStorage.removeItem('refresh_token');
+    window.location.href = '/';
   }
 
   /**
@@ -68,6 +102,10 @@ class ApiService {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          this.handleAuthError();
+          throw new Error('Authentication expired. Please login again.');
+        }
         const error = await response.json().catch(() => ({}));
         throw new Error(error.message || `Failed to ingest job: ${response.status}`);
       }
@@ -96,6 +134,10 @@ class ApiService {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          this.handleAuthError();
+          throw new Error('Authentication expired. Please login again.');
+        }
         throw new Error(`Failed to fetch jobs: ${response.status}`);
       }
 
@@ -114,7 +156,7 @@ class ApiService {
   /**
    * Update a job application
    */
-  async updateJob(jobId: string, appliedTs: string, updates: { status?: string; notes?: string }): Promise<void> {
+  async updateJob(jobId: string, appliedTs: string, updates: UpdateJobRequest): Promise<void> {
     try {
       const response = await fetch(`${API_URL}/api/jobs/${jobId}?applied_ts=${encodeURIComponent(appliedTs)}`, {
         method: 'PUT',
@@ -123,6 +165,10 @@ class ApiService {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          this.handleAuthError();
+          throw new Error('Authentication expired. Please login again.');
+        }
         throw new Error(`Failed to update job: ${response.status}`);
       }
     } catch (error) {
@@ -142,10 +188,39 @@ class ApiService {
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          this.handleAuthError();
+          throw new Error('Authentication expired. Please login again.');
+        }
         throw new Error(`Failed to delete job: ${response.status}`);
       }
     } catch (error) {
       console.error('Error deleting job:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get job application statistics
+   */
+  async getStats(): Promise<JobStats> {
+    try {
+      const response = await fetch(`${API_URL}/api/stats`, {
+        method: 'GET',
+        headers: this.getAuthHeader()
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          this.handleAuthError();
+          throw new Error('Authentication expired. Please login again.');
+        }
+        throw new Error(`Failed to fetch stats: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching stats:', error);
       throw error;
     }
   }
