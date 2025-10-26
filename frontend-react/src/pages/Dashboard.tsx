@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../utils/auth';
-import { api, JobApplication } from '../services/api';
+import { api, JobApplication, JobStats } from '../services/api';
 import { colors } from '../styles/colors';
 
 function Dashboard() {
   const navigate = useNavigate();
   const [jobs, setJobs] = useState<JobApplication[]>([]);
+  const [stats, setStats] = useState<JobStats | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,10 +18,25 @@ function Dashboard() {
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<'above' | 'below'>('below');
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
+  const [editingJob, setEditingJob] = useState<JobApplication | null>(null);
+  const [editForm, setEditForm] = useState({
+    status: '',
+    notes: '',
+    resume_url: ''
+  });
 
-  // Fetch jobs on component mount
+  // Fetch jobs and stats on component mount
   useEffect(() => {
+    // Check if token is still valid before making API calls
+    if (!auth.hasValidToken()) {
+      auth.logout();
+      return;
+    }
+    
     fetchJobs(0);
+    fetchStats();
   }, []);
 
   const fetchJobs = async (pageIndex: number) => {
@@ -47,6 +63,16 @@ function Dashboard() {
     }
   };
 
+  const fetchStats = async () => {
+    try {
+      const statsData = await api.getStats();
+      setStats(statsData);
+    } catch (err) {
+      console.error('Failed to fetch stats:', err);
+      // Don't show error for stats, just log it
+    }
+  };
+
   const goToPage = (pageIndex: number) => {
     fetchJobs(pageIndex);
   };
@@ -62,8 +88,9 @@ function Dashboard() {
       await api.ingestJob({ url: newJobUrl });
       setNewJobUrl('');
       setShowAddJobModal(false);
-      // Refresh the job list (go back to page 1)
+      // Refresh the job list and stats (go back to page 1)
       await fetchJobs(0);
+      await fetchStats();
       alert('Job added successfully! It may take a moment to process.');
     } catch (err) {
       console.error('Failed to add job:', err);
@@ -80,12 +107,69 @@ function Dashboard() {
 
     try {
       await api.deleteJob(jobId, appliedTs);
-      // Refresh current page
+      // Refresh current page and stats
       await fetchJobs(currentPage);
+      await fetchStats();
       alert('Job deleted successfully');
     } catch (err) {
       console.error('Failed to delete job:', err);
       alert('Failed to delete job. Please try again.');
+    }
+  };
+
+  const handleEditJob = (job: JobApplication) => {
+    setEditingJob(job);
+    setEditForm({
+      status: job.status,
+      notes: job.notes || '',
+      resume_url: job.resume_url || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const determineDropdownPosition = (buttonElement: HTMLElement) => {
+    const rect = buttonElement.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const dropdownHeight = 200; // Approximate dropdown height
+    
+    // Check if there's enough space below
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    
+    // If there's more space above or not enough space below, open above
+    if (spaceAbove > spaceBelow || spaceBelow < dropdownHeight) {
+      return 'above';
+    }
+    return 'below';
+  };
+
+  const handleDropdownToggle = (jobId: string, buttonElement: HTMLElement) => {
+    if (openDropdownId === jobId) {
+      setOpenDropdownId(null);
+    } else {
+      const position = determineDropdownPosition(buttonElement);
+      setDropdownPosition(position);
+      setOpenDropdownId(jobId);
+    }
+  };
+
+  const handleUpdateJob = async () => {
+    if (!editingJob) return;
+
+    try {
+      setSubmitting(true);
+      await api.updateJob(editingJob.job_id, editingJob.applied_ts, editForm);
+      setShowEditModal(false);
+      setEditingJob(null);
+      // Refresh current page and stats
+      await fetchJobs(currentPage);
+      await fetchStats();
+      alert('Job updated successfully');
+    } catch (err) {
+      console.error('Failed to update job:', err);
+      alert('Failed to update job. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -110,7 +194,14 @@ function Dashboard() {
     }
   };
 
-  const stats = {
+  // Use stats from API if available, otherwise fallback to calculated stats
+  const displayStats = stats ? {
+    total: stats.total_jobs,
+    applied: stats.status_breakdown['Applied'] || stats.status_breakdown['Captured'] || 0,
+    interview: stats.status_breakdown['Interview'] || 0,
+    offer: stats.status_breakdown['Offer'] || 0,
+    rejected: stats.status_breakdown['Rejected'] || 0
+  } : {
     total: jobs.length,
     applied: jobs.filter(j => j.status === 'Applied' || j.status === 'Captured').length,
     interview: jobs.filter(j => j.status === 'Interview').length,
@@ -130,6 +221,20 @@ function Dashboard() {
             @keyframes shimmer {
               0% { background-position: -1000px 0; }
               100% { background-position: 1000px 0; }
+            }
+            @keyframes modalSlideIn {
+              0% { 
+                opacity: 0;
+                transform: scale(0.95) translateY(-20px);
+              }
+              100% { 
+                opacity: 1;
+                transform: scale(1) translateY(0);
+              }
+            }
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
             }
             @media (max-width: 768px) {
               .mobile-hidden { display: none !important; }
@@ -419,7 +524,7 @@ function Dashboard() {
             border: `1px solid ${colors.calypso[200]}`
           }}>
             <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Total Applications</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{stats.total}</div>
+            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{displayStats.total}</div>
           </div>
           <div style={{
             backgroundColor: colors.calypso[100],
@@ -429,7 +534,7 @@ function Dashboard() {
             border: `1px solid ${colors.calypso[200]}`
           }}>
             <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Applied</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{stats.applied}</div>
+            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{displayStats.applied}</div>
           </div>
           <div style={{
             backgroundColor: colors.calypso[100],
@@ -439,7 +544,7 @@ function Dashboard() {
             border: `1px solid ${colors.calypso[200]}`
           }}>
             <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Interview</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{stats.interview}</div>
+            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{displayStats.interview}</div>
           </div>
           <div style={{
             backgroundColor: colors.calypso[100],
@@ -449,7 +554,7 @@ function Dashboard() {
             border: `1px solid ${colors.calypso[200]}`
           }}>
             <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Offers</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{stats.offer}</div>
+            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{displayStats.offer}</div>
           </div>
         </div>
 
@@ -582,7 +687,7 @@ function Dashboard() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setOpenDropdownId(openDropdownId === job.job_id ? null : job.job_id);
+                          handleDropdownToggle(job.job_id, e.currentTarget);
                         }}
                         style={{
                           padding: '8px 12px',
@@ -632,8 +737,11 @@ function Dashboard() {
                           {/* Dropdown content */}
                           <div style={{
                             position: 'absolute',
-                            right: '24px',
-                            top: '50px',
+                            right: '0',
+                            ...(dropdownPosition === 'above' 
+                              ? { bottom: '100%', marginBottom: '8px' }
+                              : { top: '100%', marginTop: '8px' }
+                            ),
                             backgroundColor: colors.bgLight,
                             border: `1px solid ${colors.calypso[200]}`,
                             borderRadius: '8px',
@@ -652,33 +760,110 @@ function Dashboard() {
                               }}
                               style={{
                                 width: '100%',
-                                padding: '14px 16px',
+                                padding: '12px 16px',
                                 backgroundColor: 'transparent',
                                 border: 'none',
-                                borderBottom: `1px solid ${colors.calypso[200]}`,
+                                borderBottom: `1px solid ${colors.calypso[100]}`,
                                 cursor: 'pointer',
                                 fontSize: '14px',
                                 fontWeight: '500',
                                 color: colors.textPrimary,
                                 textAlign: 'left',
                                 textDecoration: 'none',
-                                transition: 'all 0.2s',
+                                transition: 'all 0.2s ease',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '8px',
+                                gap: '10px',
                                 boxSizing: 'border-box'
                               }}
                               onMouseOver={(e) => {
-                                e.currentTarget.style.backgroundColor = colors.calypso[100];
+                                e.currentTarget.style.backgroundColor = colors.calypso[50];
                                 e.currentTarget.style.paddingLeft = '20px';
+                                e.currentTarget.style.color = colors.primary;
                               }}
                               onMouseOut={(e) => {
                                 e.currentTarget.style.backgroundColor = 'transparent';
                                 e.currentTarget.style.paddingLeft = '16px';
+                                e.currentTarget.style.color = colors.textPrimary;
                               }}
                             >
+                              <span style={{ fontSize: '16px', opacity: 0.8 }}>🔗</span>
                               Open Job Link
                             </a>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/job/${job.job_id}`);
+                                setOpenDropdownId(null);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                color: colors.textPrimary,
+                                borderBottom: `1px solid ${colors.calypso[100]}`,
+                                transition: 'all 0.2s ease',
+                                textAlign: 'left',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = colors.calypso[50];
+                                e.currentTarget.style.paddingLeft = '20px';
+                                e.currentTarget.style.color = colors.primary;
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.paddingLeft = '16px';
+                                e.currentTarget.style.color = colors.textPrimary;
+                              }}
+                            >
+                              <span style={{ fontSize: '16px', opacity: 0.8 }}>👁️</span>
+                              View Details
+                            </button>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditJob(job);
+                                setOpenDropdownId(null);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                color: colors.textPrimary,
+                                borderBottom: `1px solid ${colors.calypso[100]}`,
+                                transition: 'all 0.2s ease',
+                                textAlign: 'left',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = colors.calypso[50];
+                                e.currentTarget.style.paddingLeft = '20px';
+                                e.currentTarget.style.color = colors.primary;
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.paddingLeft = '16px';
+                                e.currentTarget.style.color = colors.textPrimary;
+                              }}
+                            >
+                              <span style={{ fontSize: '16px', opacity: 0.8 }}>✏️</span>
+                              Quick Edit Status
+                            </button>
 
                             <button
                               onClick={(e) => {
@@ -688,7 +873,7 @@ function Dashboard() {
                               }}
                               style={{
                                 width: '100%',
-                                padding: '14px 16px',
+                                padding: '12px 16px',
                                 backgroundColor: 'transparent',
                                 border: 'none',
                                 cursor: 'pointer',
@@ -696,17 +881,23 @@ function Dashboard() {
                                 fontWeight: '500',
                                 color: colors.error,
                                 textAlign: 'left',
-                                transition: 'all 0.2s'
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px'
                               }}
                               onMouseOver={(e) => {
-                                e.currentTarget.style.backgroundColor = `${colors.error}15`;
+                                e.currentTarget.style.backgroundColor = colors.error;
+                                e.currentTarget.style.color = 'white';
                                 e.currentTarget.style.paddingLeft = '20px';
                               }}
                               onMouseOut={(e) => {
                                 e.currentTarget.style.backgroundColor = 'transparent';
+                                e.currentTarget.style.color = colors.error;
                                 e.currentTarget.style.paddingLeft = '16px';
                               }}
                             >
+                              <span style={{ fontSize: '16px', opacity: 0.8 }}>🗑️</span>
                               Delete
                             </button>
                           </div>
@@ -836,7 +1027,7 @@ function Dashboard() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setOpenDropdownId(openDropdownId === job.job_id ? null : job.job_id);
+                        handleDropdownToggle(job.job_id, e.currentTarget);
                       }}
                       style={{
                         padding: '6px 10px',
@@ -873,7 +1064,10 @@ function Dashboard() {
                         <div style={{
                           position: 'absolute',
                           right: '0',
-                          top: '40px',
+                          ...(dropdownPosition === 'above' 
+                            ? { bottom: '100%', marginBottom: '8px' }
+                            : { top: '100%', marginTop: '8px' }
+                          ),
                           backgroundColor: colors.bgLight,
                           border: `1px solid ${colors.calypso[200]}`,
                           borderRadius: '8px',
@@ -892,33 +1086,110 @@ function Dashboard() {
                             }}
                             style={{
                               width: '100%',
-                              padding: '14px 16px',
+                              padding: '12px 16px',
                               backgroundColor: 'transparent',
                               border: 'none',
-                              borderBottom: `1px solid ${colors.calypso[200]}`,
+                              borderBottom: `1px solid ${colors.calypso[100]}`,
                               cursor: 'pointer',
                               fontSize: '14px',
                               fontWeight: '500',
                               color: colors.textPrimary,
                               textAlign: 'left',
                               textDecoration: 'none',
-                              transition: 'all 0.2s',
+                              transition: 'all 0.2s ease',
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '8px',
+                              gap: '10px',
                               boxSizing: 'border-box'
                             }}
                             onMouseOver={(e) => {
-                              e.currentTarget.style.backgroundColor = colors.calypso[100];
+                              e.currentTarget.style.backgroundColor = colors.calypso[50];
                               e.currentTarget.style.paddingLeft = '20px';
+                              e.currentTarget.style.color = colors.primary;
                             }}
                             onMouseOut={(e) => {
                               e.currentTarget.style.backgroundColor = 'transparent';
                               e.currentTarget.style.paddingLeft = '16px';
+                              e.currentTarget.style.color = colors.textPrimary;
                             }}
                           >
+                            <span style={{ fontSize: '16px', opacity: 0.8 }}>🔗</span>
                             Open Job Link
                           </a>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/job/${job.job_id}`);
+                              setOpenDropdownId(null);
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '12px 16px',
+                              backgroundColor: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              color: colors.textPrimary,
+                              borderBottom: `1px solid ${colors.calypso[100]}`,
+                              transition: 'all 0.2s ease',
+                              textAlign: 'left',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = colors.calypso[50];
+                              e.currentTarget.style.paddingLeft = '20px';
+                              e.currentTarget.style.color = colors.primary;
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.paddingLeft = '16px';
+                              e.currentTarget.style.color = colors.textPrimary;
+                            }}
+                          >
+                            <span style={{ fontSize: '16px', opacity: 0.8 }}>👁️</span>
+                            View Details
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditJob(job);
+                              setOpenDropdownId(null);
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '12px 16px',
+                              backgroundColor: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: '500',
+                              color: colors.textPrimary,
+                              borderBottom: `1px solid ${colors.calypso[100]}`,
+                              transition: 'all 0.2s ease',
+                              textAlign: 'left',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = colors.calypso[50];
+                              e.currentTarget.style.paddingLeft = '20px';
+                              e.currentTarget.style.color = colors.primary;
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.paddingLeft = '16px';
+                              e.currentTarget.style.color = colors.textPrimary;
+                            }}
+                          >
+                            <span style={{ fontSize: '16px', opacity: 0.8 }}>✏️</span>
+                            Quick Edit Status
+                          </button>
 
                           <button
                             onClick={(e) => {
@@ -928,7 +1199,7 @@ function Dashboard() {
                             }}
                             style={{
                               width: '100%',
-                              padding: '14px 16px',
+                              padding: '12px 16px',
                               backgroundColor: 'transparent',
                               border: 'none',
                               cursor: 'pointer',
@@ -936,17 +1207,23 @@ function Dashboard() {
                               fontWeight: '500',
                               color: colors.error,
                               textAlign: 'left',
-                              transition: 'all 0.2s'
+                              transition: 'all 0.2s ease',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px'
                             }}
                             onMouseOver={(e) => {
-                              e.currentTarget.style.backgroundColor = `${colors.error}15`;
+                              e.currentTarget.style.backgroundColor = colors.error;
+                              e.currentTarget.style.color = 'white';
                               e.currentTarget.style.paddingLeft = '20px';
                             }}
                             onMouseOut={(e) => {
                               e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = colors.error;
                               e.currentTarget.style.paddingLeft = '16px';
                             }}
                           >
+                            <span style={{ fontSize: '16px', opacity: 0.8 }}>🗑️</span>
                             Delete
                           </button>
                         </div>
@@ -1137,6 +1414,251 @@ function Dashboard() {
                 }}
               >
                 {submitting ? 'Adding...' : 'Add Job'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Job Modal */}
+      {showEditModal && editingJob && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px',
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            width: '100%',
+            maxWidth: '520px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: `1px solid ${colors.calypso[200]}`,
+            animation: 'modalSlideIn 0.3s ease-out'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '24px',
+              paddingBottom: '16px',
+              borderBottom: `1px solid ${colors.calypso[200]}`
+            }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '24px',
+                fontWeight: '700',
+                color: colors.textPrimary,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <div style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: colors.primary
+                }} />
+                Edit Job Application
+              </h2>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingJob(null);
+                  setEditForm({ status: '', notes: '', resume_url: '' });
+                }}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: colors.neutral[100],
+                  color: colors.textLight,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '18px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = colors.neutral[200];
+                  e.currentTarget.style.color = colors.textPrimary;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = colors.neutral[100];
+                  e.currentTarget.style.color = colors.textLight;
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '32px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '10px',
+                fontSize: '15px',
+                fontWeight: '600',
+                color: colors.textPrimary,
+                letterSpacing: '0.3px'
+              }}>
+                Application Status
+              </label>
+              <select
+                value={editForm.status}
+                onChange={(e) => setEditForm({...editForm, status: e.target.value})}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  backgroundColor: colors.calypso[50],
+                  border: `2px solid ${colors.calypso[200]}`,
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                  color: colors.textPrimary,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+                  backgroundPosition: 'right 12px center',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: '16px'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = colors.primary;
+                  e.currentTarget.style.backgroundColor = 'white';
+                  e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.primary}20`;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = colors.calypso[200];
+                  e.currentTarget.style.backgroundColor = colors.calypso[50];
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+                disabled={submitting}
+              >
+                <option value="Applied">📝 Applied</option>
+                <option value="Interview">🎯 Interview</option>
+                <option value="Offer">🎉 Offer</option>
+                <option value="Rejected">❌ Rejected</option>
+              </select>
+              <div style={{
+                marginTop: '8px',
+                fontSize: '13px',
+                color: colors.textLight,
+                fontStyle: 'italic'
+              }}>
+                Update the status of this job application
+              </div>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              gap: '16px',
+              justifyContent: 'flex-end',
+              paddingTop: '24px',
+              borderTop: `1px solid ${colors.calypso[200]}`
+            }}>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingJob(null);
+                  setEditForm({ status: '', notes: '', resume_url: '' });
+                }}
+                disabled={submitting}
+                style={{
+                  padding: '14px 28px',
+                  backgroundColor: colors.neutral[100],
+                  color: colors.textSecondary,
+                  border: `2px solid ${colors.neutral[200]}`,
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  opacity: submitting ? 0.6 : 1,
+                  transition: 'all 0.2s ease',
+                  letterSpacing: '0.3px'
+                }}
+                onMouseEnter={(e) => {
+                  if (!submitting) {
+                    e.currentTarget.style.backgroundColor = colors.neutral[200];
+                    e.currentTarget.style.borderColor = colors.neutral[300];
+                    e.currentTarget.style.color = colors.textPrimary;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!submitting) {
+                    e.currentTarget.style.backgroundColor = colors.neutral[100];
+                    e.currentTarget.style.borderColor = colors.neutral[200];
+                    e.currentTarget.style.color = colors.textSecondary;
+                  }
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateJob}
+                disabled={submitting}
+                style={{
+                  padding: '14px 28px',
+                  backgroundColor: colors.primary,
+                  color: 'white',
+                  border: `2px solid ${colors.primary}`,
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  opacity: submitting ? 0.6 : 1,
+                  transition: 'all 0.2s ease',
+                  letterSpacing: '0.3px',
+                  boxShadow: submitting ? 'none' : `0 4px 12px ${colors.primary}30`
+                }}
+                onMouseEnter={(e) => {
+                  if (!submitting) {
+                    e.currentTarget.style.backgroundColor = colors.primaryHover;
+                    e.currentTarget.style.borderColor = colors.primaryHover;
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = `0 6px 16px ${colors.primary}40`;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!submitting) {
+                    e.currentTarget.style.backgroundColor = colors.primary;
+                    e.currentTarget.style.borderColor = colors.primary;
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = `0 4px 12px ${colors.primary}30`;
+                  }
+                }}
+              >
+                {submitting ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid transparent',
+                      borderTop: '2px solid white',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    Updating...
+                  </span>
+                ) : (
+                  '✨ Update Job'
+                )}
               </button>
             </div>
           </div>

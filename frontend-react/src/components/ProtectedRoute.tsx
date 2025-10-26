@@ -10,7 +10,12 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setIsAuthenticated(auth.hasToken());
+    const isValid = auth.hasValidToken();
+    if (!isValid && auth.hasToken()) {
+      // Token exists but is expired, clear it
+      auth.clearToken();
+    }
+    setIsAuthenticated(isValid);
   }, []);
 
   // Show nothing while checking (prevents flash)

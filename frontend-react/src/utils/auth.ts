@@ -47,7 +47,25 @@ async function generateCodeChallenge(codeVerifier: string): Promise<string> {
 
 export const auth = {
   /**
-   * Check if user has a token in localStorage
+   * Check if user has a valid (non-expired) token
+   */
+  hasValidToken(): boolean {
+    const idToken = localStorage.getItem('id_token');
+    if (!idToken) return false;
+    
+    try {
+      // Decode JWT to check expiration
+      const payload = JSON.parse(atob(idToken.split('.')[1]));
+      const currentTime = Math.floor(Date.now() / 1000);
+      return payload.exp > currentTime;
+    } catch (error) {
+      console.error('Error validating token:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Check if user has a token in localStorage (legacy method)
    */
   hasToken(): boolean {
     return !!localStorage.getItem('access_token');
