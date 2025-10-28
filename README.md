@@ -30,20 +30,13 @@ JobTrackr is a full-stack serverless application that streamlines job applicatio
 
 JobTrackr consists of three main components:
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│     Chrome      │────▶│   AWS Lambda     │────▶│   React SPA     │
-│   Extension     │     │    Backend       │     │   Dashboard     │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                               │
-                               ▼
-                        ┌──────────────────┐
-                        │    DynamoDB      │
-                        │   + Bedrock AI   │
-                        └──────────────────┘
-```
+![JobTrackr Architecture](Architecture.webp)
 
-**[View Detailed Architecture Diagram →](#architecture-diagram)**
+<div align="center">
+  <em>Full-stack serverless architecture with Chrome Extension, AWS Lambda backend, and React frontend</em>
+</div>
+
+<br>
 
 ### Tech Stack
 
@@ -179,9 +172,9 @@ JobTrackr/
 
 ### Media & Guides
 
-- **Video Demo**: [Link to be added](#video-demo)
-- **Architecture Diagram**: [Link to be added](#architecture-diagram)
-- **Medium Blog Series**: [Link to be added](#medium-series)
+- **Video Demo**: [Watch on Google Drive](GOOGLE_DRIVE_LINK_HERE)
+- **Architecture Diagram**: [View Diagram](Architecture.webp)
+- **Medium Blog Series**: [Learning AWS the Practical Way: Deploy, Debug, Deliver](https://medium.com/aws-in-plain-english/learning-aws-the-practical-way-deploy-debug-deliver-3b8d946d90fd)
 
 ---
 
@@ -270,8 +263,8 @@ This project is open source and available under the [MIT License](LICENSE).
 <div align="center">
   <p>Built with ❤️ using AWS, React, and Claude AI</p>
   <p>
-    <a href="#video-demo">Demo</a> •
-    <a href="#medium-series">Blog</a> •
+    <a href="GOOGLE_DRIVE_LINK_HERE">Demo</a> •
+    <a href="https://medium.com/aws-in-plain-english/learning-aws-the-practical-way-deploy-debug-deliver-3b8d946d90fd">Blog</a> •
     <a href="https://github.com/anpise/JobTrackr">Star on GitHub</a>
   </p>
 </div>
