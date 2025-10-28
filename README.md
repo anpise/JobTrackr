@@ -4,10 +4,10 @@
 
   <p>Stay organized in your job search with intelligent tracking, automated data extraction, and insightful analytics.</p>
 
-  <a href="#video-demo">Video Demo</a> •
+  <a href="https://drive.google.com/file/d/1YzihsxoOkMy4ajigzhPtyu7Q4HJeCp5F/view?usp=sharing">Video Demo</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#medium-series">Blog Series</a>
+  <a href="https://medium.com/aws-in-plain-english/learning-aws-the-practical-way-deploy-debug-deliver-3b8d946d90fd">Blog Series</a>
 </div>
 
 ---
@@ -172,7 +172,7 @@ JobTrackr/
 
 ### Media & Guides
 
-- **Video Demo**: [Watch on Google Drive](GOOGLE_DRIVE_LINK_HERE)
+- **Video Demo**: [Watch video](https://drive.google.com/file/d/1YzihsxoOkMy4ajigzhPtyu7Q4HJeCp5F/view?usp=sharing)
 - **Architecture Diagram**: [View Diagram](Architecture.webp)
 - **Medium Blog Series**: [Learning AWS the Practical Way: Deploy, Debug, Deliver](https://medium.com/aws-in-plain-english/learning-aws-the-practical-way-deploy-debug-deliver-3b8d946d90fd)
 
@@ -263,7 +263,7 @@ This project is open source and available under the [MIT License](LICENSE).
 <div align="center">
   <p>Built with ❤️ using AWS, React, and Claude AI</p>
   <p>
-    <a href="GOOGLE_DRIVE_LINK_HERE">Demo</a> •
+    <a href="https://drive.google.com/file/d/1YzihsxoOkMy4ajigzhPtyu7Q4HJeCp5F/view?usp=sharing">Demo</a> •
     <a href="https://medium.com/aws-in-plain-english/learning-aws-the-practical-way-deploy-debug-deliver-3b8d946d90fd">Blog</a> •
     <a href="https://github.com/anpise/JobTrackr">Star on GitHub</a>
   </p>
