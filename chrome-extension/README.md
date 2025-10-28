@@ -1,33 +1,58 @@
 # JobTrackr Chrome Extension
 
-A Chrome extension for capturing job application URLs and sending them to the JobTrackr backend for processing.
+A Chrome extension for capturing job application URLs and sending them to the JobTrackr backend for AI-powered analysis.
 
 ## Features
 
 - **Keyboard Shortcut**: Press `Ctrl+Shift+K` (or `Cmd+Shift+K` on Mac) to quickly capture the current job URL
 - **Manual Capture**: Click the extension icon and use the "Capture Current Job" button
+- **Authentication**: Integrated AWS Cognito OAuth flow
 - **Success Notifications**: Visual feedback when job URLs are successfully captured
 - **URL Validation**: Ensures only valid URLs are captured
 - **Dashboard Access**: Quick access to the JobTrackr dashboard
 
 ## Installation
 
-### Development Installation
+### Prerequisites
 
-1. **Load the Extension in Chrome**:
-   - Open Chrome and go to `chrome://extensions/`
-   - Enable "Developer mode" (toggle in top right)
+- Chrome browser
+- Backend API deployed (see [../backend-lambda/README.md](../backend-lambda/README.md))
+- AWS Cognito User Pool configured
+- Frontend dashboard running (see [../frontend-react/README.md](../frontend-react/README.md))
+
+### Setup Steps
+
+1. **Configure Extension Settings**:
+   ```bash
+   cd chrome-extension
+   cp config.example.js config.js
+   ```
+
+2. **Edit `config.js`** with your values:
+   ```javascript
+   const EXTENSION_CONFIG = {
+     COGNITO_DOMAIN: 'your-domain.auth.us-east-2.amazoncognito.com',
+     CLIENT_ID: 'your-cognito-client-id',
+     REGION: 'us-east-2',
+     API_GATEWAY_URL: 'https://your-api.execute-api.us-east-2.amazonaws.com/dev',
+     DASHBOARD_URL: 'http://localhost:5173' // or production URL
+   };
+   ```
+
+3. **Load Extension in Chrome**:
+   - Open Chrome and navigate to `chrome://extensions/`
+   - Enable "Developer mode" (toggle in top right corner)
    - Click "Load unpacked"
    - Select the `chrome-extension` folder
 
-2. **Test with Dummy Responses**:
-   - The extension now includes dummy responses for testing
-   - No backend API needed for initial testing
-   - See `TESTING_GUIDE.md` for detailed testing instructions
+4. **Pin Extension** (recommended):
+   - Click the puzzle icon in Chrome toolbar
+   - Find "JobTrackr" and click the pin icon
+   - Extension icon will appear in toolbar for easy access
 
-3. **Configure Backend URL** (when ready for real API):
-   - Update the `BACKEND_URL` in both `background.js` and `popup.js`
-   - Default is set to `http://localhost:8000`
+5. **Get Extension ID** (needed for frontend integration):
+   - After loading, copy the Extension ID from `chrome://extensions/`
+   - Add this ID to `frontend-react/.env` as `VITE_EXTENSION_ID`
 
 ### Production Installation
 
@@ -52,26 +77,58 @@ A Chrome extension for capturing job application URLs and sending them to the Jo
 
 ## Configuration
 
-### Backend API Endpoint
-The extension expects the backend to have the following endpoint:
+### Configuration File
+
+The `config.js` file contains all extension settings:
+
+```javascript
+const EXTENSION_CONFIG = {
+  // AWS Cognito - Copy from AWS Console
+  COGNITO_DOMAIN: 'your-domain.auth.us-east-2.amazoncognito.com',
+  CLIENT_ID: 'your-client-id',
+  REGION: 'us-east-2',
+
+  // Backend API - From sam deploy output
+  API_GATEWAY_URL: 'https://xxx.execute-api.us-east-2.amazonaws.com/dev',
+
+  // Dashboard - Local dev or production
+  DASHBOARD_URL: 'http://localhost:5173'
+};
 ```
-POST /api/jobs/capture
+
+### Getting Configuration Values
+
+1. **COGNITO_DOMAIN**: AWS Cognito → User Pool → App Integration → Domain name
+2. **CLIENT_ID**: Cognito → App clients → Your app → Client ID
+3. **API_GATEWAY_URL**: Output from `sam deploy` command in backend-lambda
+4. **DASHBOARD_URL**:
+   - Development: `http://localhost:5173`
+   - Production: Your S3/CloudFront URL
+
+### Backend API Integration
+
+The extension calls the following endpoint:
+```
+POST /api/jobs/ingest
+Authorization: Bearer <cognito_token>
 Content-Type: application/json
 
 {
-  "url": "https://example.com/job-posting",
-  "title": "Job Title",
-  "captured_at": "2024-01-01T00:00:00.000Z"
+  "url": "https://example.com/job-posting"
 }
 ```
 
-### Response Format
-The backend should respond with:
+**Expected Response**:
 ```json
 {
   "success": true,
-  "job_id": "uuid",
-  "message": "Job captured successfully"
+  "job_id": "abc123def456",
+  "message": "Job captured and analyzed successfully",
+  "data": {
+    "company": "Example Corp",
+    "title": "Software Engineer",
+    "location": "Remote"
+  }
 }
 ```
 
@@ -106,37 +163,122 @@ chrome-extension/
 
 - `Ctrl+Shift+K` (Windows/Linux) / `Cmd+Shift+K` (Mac): Capture current job URL
 
-## Error Handling
+## Authentication
 
-The extension handles various error scenarios:
-- Invalid URLs
-- Network connectivity issues
-- Backend API errors
-- Missing active tabs
+The extension uses AWS Cognito OAuth 2.0 flow:
 
-## Development Notes
+1. User clicks "Login" in popup
+2. Opens Cognito hosted UI in new tab
+3. User authenticates
+4. Cognito redirects with tokens
+5. Extension stores tokens in `chrome.storage`
+6. Tokens automatically included in API requests
 
-### Testing
-1. Load the extension in Chrome Developer mode
-2. Navigate to a job posting website
-3. Use the keyboard shortcut or manual capture
-4. Check browser console for any errors
-5. Verify backend receives the data
+**Token Storage**: Tokens are stored securely using Chrome's storage API and automatically refreshed when needed.
 
-### Debugging
-- Open Chrome DevTools on the extension popup
-- Check the background script in `chrome://extensions/`
-- Monitor network requests in DevTools
+## Testing
+
+### Manual Testing
+
+1. **Load Extension**: Follow installation steps above
+2. **Navigate to Job Site**: Open any job posting (LinkedIn, Indeed, etc.)
+3. **Capture Job**:
+   - Press `Ctrl+Shift+K` OR
+   - Click extension icon → "Capture Current Job"
+4. **Verify**: Check notification and dashboard for captured job
+
+### Testing Without Backend
+
+For testing the extension UI without a backend:
+- See [TESTING_GUIDE.md](TESTING_GUIDE.md) for dummy data setup
+- Use [test-page.html](test-page.html) for local testing
+
+### Debug Mode
+
+1. **View Popup Console**:
+   - Right-click extension icon → "Inspect popup"
+   - Console will show API calls and errors
+
+2. **View Background Script**:
+   - Go to `chrome://extensions/`
+   - Click "Service worker" under JobTrackr
+   - View background script logs
+
+3. **Check Storage**:
+   ```javascript
+   // In popup console
+   chrome.storage.local.get(null, (data) => console.log(data));
+   ```
+
+## Troubleshooting
 
 ### Common Issues
-- **CORS errors**: Ensure backend has proper CORS headers
-- **Permission denied**: Check manifest permissions
-- **Network errors**: Verify backend URL and connectivity
 
-## Future Enhancements
+**Extension Not Loading**
+- Ensure `config.js` exists (copy from `config.example.js`)
+- Check Chrome console for JavaScript errors
+- Verify manifest.json is valid
 
-- [ ] Add job title and company extraction
-- [ ] Support for multiple job sites
-- [ ] Offline mode with sync
-- [ ] Custom keyboard shortcuts
-- [ ] Job application status tracking
+**Authentication Fails**
+- Verify Cognito domain and client ID in `config.js`
+- Ensure extension ID is whitelisted in Cognito
+- Check that redirect URIs are configured correctly
+
+**API Errors (401 Unauthorized)**
+- Token might be expired - click "Login" again
+- Verify backend is deployed and accessible
+- Check API Gateway URL in `config.js`
+
+**CORS Errors**
+- Backend must include proper CORS headers
+- API Gateway needs CORS configuration
+- Check Lambda response headers
+
+**Keyboard Shortcut Not Working**
+- Shortcut might conflict with another extension
+- Try changing in `chrome://extensions/shortcuts`
+- Ensure page has focus (not DevTools)
+
+### Debugging Commands
+
+```bash
+# Check if extension is loaded
+chrome://extensions/
+
+# View all keyboard shortcuts
+chrome://extensions/shortcuts
+
+# Clear extension storage
+# In popup console:
+chrome.storage.local.clear()
+```
+
+## Production Deployment
+
+### Chrome Web Store
+
+1. **Prepare Package**:
+   ```bash
+   # Ensure config.js has production values
+   zip -r jobtrackr-extension.zip chrome-extension/ -x "*.git*" "node_modules/*" "test-*"
+   ```
+
+2. **Upload to Chrome Web Store**:
+   - Go to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
+   - Create new item
+   - Upload zip file
+   - Fill in store listing details
+   - Submit for review
+
+3. **Update Extension Settings**:
+   - Set production `DASHBOARD_URL`
+   - Set production `API_GATEWAY_URL`
+   - Ensure Cognito allows extension ID
+
+## 📚 Additional Resources
+
+- [Chrome Extension Documentation](https://developer.chrome.com/docs/extensions/)
+- [Manifest V3 Migration Guide](https://developer.chrome.com/docs/extensions/mv3/intro/)
+- [Chrome Storage API](https://developer.chrome.com/docs/extensions/reference/storage/)
+- [Testing Guide](TESTING_GUIDE.md)
+- [Extension ID Setup](HOW_TO_PIN_EXTENSION_ID.md)
