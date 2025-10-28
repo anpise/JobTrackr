@@ -272,11 +272,16 @@ def handle_get_stats(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if 'claims' in authorizer:
             user_id = authorizer['claims'].get('sub')  # Cognito user ID
 
+        logger.info(f"Stats request - user_id: {user_id}")
+        logger.info(f"Authorizer: {authorizer}")
+
         if not user_id:
             return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
 
         # Get job statistics using dedicated optimized query
         stats = get_user_job_stats(user_id)
+        
+        logger.info(f"Stats result: {stats}")
 
         return create_success_response(stats)
 
