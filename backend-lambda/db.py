@@ -405,18 +405,24 @@ def get_user_job_stats(user_id: str) -> Dict[str, Any]:
         Dictionary containing various job statistics
     """
     try:
+        logger.info(f"Getting stats for user_id: {user_id}")
+        
         # Query with projection to only get fields needed for stats
         response = table.query(
-            IndexName='UserIndex',
-            KeyConditionExpression='user_id = :user_id',
-            ProjectionExpression='job_id, #status, company, position, applied_ts, created_at',
+            KeyConditionExpression='PK = :pk AND begins_with(SK, :sk_prefix)',
+            ProjectionExpression='job_id, #status, company, #position, applied_ts, created_at',
             ExpressionAttributeNames={
-                '#status': 'status'
+                '#status': 'status',
+                '#position': 'position'
             },
             ExpressionAttributeValues={
-                ':user_id': user_id
+                ':pk': f'USER#{user_id}',
+                ':sk_prefix': 'JOB#'
             }
         )
+        
+        logger.info(f"Query response: {response}")
+        logger.info(f"Items count: {len(response.get('Items', []))}")
         
         jobs = response.get('Items', [])
         
