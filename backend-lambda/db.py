@@ -122,11 +122,17 @@ def put_job(item: Dict[str, Any]) -> bool:
         True if successful, False otherwise
     """
     try:
-        table.put_item(Item=item)
+        table.put_item(
+            Item=item,
+            ConditionExpression='attribute_not_exists(PK)'
+        )
         logger.info(f"Successfully inserted job: {item['job_id']} for user: {item['user_id']}")
         return True
     except ClientError as e:
-        logger.error(f"Failed to insert job into DynamoDB: {str(e)}", exc_info=True)
+        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            logger.warning(f"Job already exists: {item['job_id']} for user: {item['user_id']}")
+        else:
+            logger.error(f"Failed to insert job into DynamoDB: {str(e)}", exc_info=True)
         return False
     except Exception as e:
         logger.error(f"Unexpected error inserting job: {str(e)}", exc_info=True)
@@ -230,83 +236,6 @@ def get_jobs_by_company(user_id: str, company: str, limit: int = 50) -> List[Dic
         return []
 
 
-def update_job_status(
-    user_id: str,
-    job_id: str,
-    applied_ts: str,
-    new_status: str
-) -> bool:
-    """
-    Update job status
-
-    Args:
-        user_id: User identifier
-        job_id: Job identifier
-        applied_ts: ISO timestamp
-        new_status: New status value
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        table.update_item(
-            Key={
-                'PK': f'USER#{user_id}',
-                'SK': f'JOB#{applied_ts}#{job_id}'
-            },
-            UpdateExpression='SET #status = :status, last_updated_ts = :updated',
-            ExpressionAttributeNames={
-                '#status': 'status'
-            },
-            ExpressionAttributeValues={
-                ':status': new_status,
-                ':updated': datetime.now(timezone.utc).isoformat()
-            }
-        )
-        logger.info(f"Updated job {job_id} status to {new_status}")
-        return True
-    except ClientError as e:
-        logger.error(f"Failed to update job status: {str(e)}", exc_info=True)
-        return False
-
-
-def update_job_resume(
-    user_id: str,
-    job_id: str,
-    applied_ts: str,
-    resume_url: str
-) -> bool:
-    """
-    Update job with resume URL
-
-    Args:
-        user_id: User identifier
-        job_id: Job identifier
-        applied_ts: ISO timestamp
-        resume_url: S3 URL of resume
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        table.update_item(
-            Key={
-                'PK': f'USER#{user_id}',
-                'SK': f'JOB#{applied_ts}#{job_id}'
-            },
-            UpdateExpression='SET resume_url = :resume, last_updated_ts = :updated',
-            ExpressionAttributeValues={
-                ':resume': resume_url,
-                ':updated': datetime.now(timezone.utc).isoformat()
-            }
-        )
-        logger.info(f"Updated job {job_id} with resume URL")
-        return True
-    except ClientError as e:
-        logger.error(f"Failed to update resume URL: {str(e)}", exc_info=True)
-        return False
-
-
 def update_job(
     user_id: str,
     job_id: str,
@@ -383,12 +312,16 @@ def delete_job(user_id: str, job_id: str, applied_ts: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        table.delete_item(
+        response = table.delete_item(
             Key={
                 'PK': f'USER#{user_id}',
                 'SK': f'JOB#{applied_ts}#{job_id}'
-            }
+            },
+            ReturnValues='ALL_OLD'
         )
+        if not response.get('Attributes'):
+            logger.warning(f"Attempted to delete non-existent job {job_id} for user {user_id}")
+            return False
         logger.info(f"Deleted job {job_id} for user {user_id}")
         return True
     except ClientError as e:
@@ -398,100 +331,76 @@ def delete_job(user_id: str, job_id: str, applied_ts: str) -> bool:
 
 def get_user_job_stats(user_id: str) -> Dict[str, Any]:
     """
-    Get job application statistics for a user
-    Optimized query that only fetches necessary fields for stats calculation
-    
-    Returns:
-        Dictionary containing various job statistics
+    Get job application statistics for a user.
+    Uses projection to minimize read costs.
     """
+    empty_stats = {
+        'total_jobs': 0,
+        'status_breakdown': {},
+        'company_breakdown': {},
+        'recent_activity': [],
+        'application_trends': {}
+    }
+
     try:
         logger.info(f"Getting stats for user_id: {user_id}")
-        
-        # Query with projection to only get fields needed for stats
+
         response = table.query(
             KeyConditionExpression='PK = :pk AND begins_with(SK, :sk_prefix)',
-            ProjectionExpression='job_id, #status, company, #position, applied_ts, created_at',
+            ProjectionExpression='job_id, #status, company, title, applied_ts',
             ExpressionAttributeNames={
-                '#status': 'status',
-                '#position': 'position'
+                '#status': 'status'
             },
             ExpressionAttributeValues={
                 ':pk': f'USER#{user_id}',
                 ':sk_prefix': 'JOB#'
-            }
+            },
+            ScanIndexForward=False
         )
-        
-        logger.info(f"Query response: {response}")
-        logger.info(f"Items count: {len(response.get('Items', []))}")
-        
+
         jobs = response.get('Items', [])
-        
+        logger.info(f"Items count: {len(jobs)}")
+
         if not jobs:
-            return {
-                'total_jobs': 0,
-                'status_breakdown': {},
-                'company_breakdown': {},
-                'recent_activity': [],
-                'application_trends': {}
-            }
-        
-        # Calculate statistics
-        total_jobs = len(jobs)
-        status_breakdown = {}
-        company_breakdown = {}
+            return empty_stats
+
+        # Recent activity: first 10 are already newest-first (ScanIndexForward=False)
         recent_activity = []
-        
-        # Process each job
-        for job in jobs:
-            # Status breakdown
-            status = job.get('status', 'Unknown')
-            status_breakdown[status] = status_breakdown.get(status, 0) + 1
-            
-            # Company breakdown
-            company = job.get('company', 'Unknown')
-            company_breakdown[company] = company_breakdown.get(company, 0) + 1
-            
-            # Recent activity (last 10 jobs by applied_ts)
+        for job in jobs[:10]:
             recent_activity.append({
                 'job_id': job.get('job_id'),
-                'company': company,
-                'position': job.get('position', 'Unknown'),
-                'status': status,
+                'company': job.get('company', 'Unknown'),
+                'position': job.get('title', 'Unknown'),
+                'status': job.get('status', 'Unknown'),
                 'applied_ts': job.get('applied_ts'),
-                'created_at': job.get('created_at')
+                'created_at': job.get('applied_ts')
             })
-        
-        # Sort recent activity by applied_ts (most recent first)
-        recent_activity.sort(key=lambda x: x.get('applied_ts', ''), reverse=True)
-        recent_activity = recent_activity[:10]
-        
-        # Calculate application trends (jobs per month)
+
+        # Single pass for all aggregations
+        status_breakdown = {}
+        company_breakdown = {}
         application_trends = {}
+
         for job in jobs:
+            status = job.get('status', 'Unknown')
+            status_breakdown[status] = status_breakdown.get(status, 0) + 1
+
+            company = job.get('company', 'Unknown')
+            company_breakdown[company] = company_breakdown.get(company, 0) + 1
+
             applied_ts = job.get('applied_ts', '')
-            if applied_ts:
-                # Extract year-month from timestamp
-                try:
-                    # Assuming applied_ts is in format "2025-10-12T15:41:37.926992+00:00"
-                    year_month = applied_ts[:7]  # "2025-10"
-                    application_trends[year_month] = application_trends.get(year_month, 0) + 1
-                except:
-                    continue
-        
+            if applied_ts and len(applied_ts) >= 7:
+                year_month = applied_ts[:7]
+                application_trends[year_month] = application_trends.get(year_month, 0) + 1
+
         return {
-            'total_jobs': total_jobs,
+            'total_jobs': len(jobs),
             'status_breakdown': status_breakdown,
             'company_breakdown': company_breakdown,
             'recent_activity': recent_activity,
             'application_trends': application_trends
         }
-        
+
     except ClientError as e:
         logger.error(f"Failed to get job stats: {str(e)}", exc_info=True)
-        return {
-            'total_jobs': 0,
-            'status_breakdown': {},
-            'company_breakdown': {},
-            'recent_activity': [],
-            'application_trends': {}
-        }
+        return empty_stats
