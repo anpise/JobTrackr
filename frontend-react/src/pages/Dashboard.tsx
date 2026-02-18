@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../utils/auth';
 import { api, JobApplication, JobStats } from '../services/api';
@@ -20,6 +20,7 @@ function Dashboard() {
   const [totalPages, setTotalPages] = useState<number>(1);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<'above' | 'below'>('below');
+  const [dropdownRect, setDropdownRect] = useState<DOMRect | null>(null);
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [editingJob, setEditingJob] = useState<JobApplication | null>(null);
   const [editForm, setEditForm] = useState({
@@ -28,6 +29,9 @@ function Dashboard() {
     resume_url: ''
   });
   const [trendView, setTrendView] = useState<'monthly' | 'weekly' | 'daily'>('monthly');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showSearchInput, setShowSearchInput] = useState<boolean>(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   // Fetch jobs and stats on component mount
   useEffect(() => {
@@ -41,14 +45,15 @@ function Dashboard() {
     fetchJobs(0);
   }, []);
 
-  const fetchJobs = async (pageIndex: number, status?: string, resetPagination?: boolean) => {
+  const fetchJobs = async (pageIndex: number, status?: string, resetPagination?: boolean, search?: string) => {
     try {
       setLoading(true);
       setError(null);
       const lastKey = resetPagination ? undefined : pageTokens[pageIndex];
       const statusParam = status !== undefined ? status : filterStatus;
       const apiStatus = statusParam === 'All' ? undefined : statusParam;
-      const response = await api.getJobs(25, lastKey, apiStatus);
+      const searchParam = search !== undefined ? search : searchQuery;
+      const response = await api.getJobs(25, lastKey, apiStatus, searchParam || undefined);
       setJobs(response.jobs);
       setCurrentPage(pageIndex);
 
@@ -145,14 +150,12 @@ function Dashboard() {
   const determineDropdownPosition = (buttonElement: HTMLElement) => {
     const rect = buttonElement.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
-    const dropdownHeight = 200; // Approximate dropdown height
-    
-    // Check if there's enough space below
+    const dropdownHeight = 220;
+
     const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    
-    // If there's more space above or not enough space below, open above
-    if (spaceAbove > spaceBelow || spaceBelow < dropdownHeight) {
+
+    // Only open above if there's truly not enough space below
+    if (spaceBelow < dropdownHeight) {
       return 'above';
     }
     return 'below';
@@ -164,6 +167,7 @@ function Dashboard() {
     } else {
       const position = determineDropdownPosition(buttonElement);
       setDropdownPosition(position);
+      setDropdownRect(buttonElement.getBoundingClientRect());
       setOpenDropdownId(jobId);
     }
   };
@@ -190,6 +194,16 @@ function Dashboard() {
 
   const handleLogout = () => {
     auth.logout();
+  };
+
+  const handleSearchSubmit = () => {
+    fetchJobs(0, undefined, true, searchQuery);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setShowSearchInput(false);
+    fetchJobs(0, undefined, true, '');
   };
 
   // Filtering is now done server-side via the API status parameter
@@ -427,6 +441,14 @@ function Dashboard() {
             0% { background-position: -1000px 0; }
             100% { background-position: 1000px 0; }
           }
+          @keyframes modalSlideIn {
+            0% { opacity: 0; transform: scale(0.95) translateY(-20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
           @media (max-width: 768px) {
             .mobile-hidden { display: none !important; }
             .desktop-table { display: none !important; }
@@ -470,7 +492,7 @@ function Dashboard() {
             JobTrackr
           </h1>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button
             onClick={() => setShowAddJobModal(true)}
             style={{
@@ -494,6 +516,75 @@ function Dashboard() {
           >
             + Add
           </button>
+          {showSearchInput ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0', border: `2px solid ${colors.calypso[600]}`, borderRadius: '6px', overflow: 'hidden' }}>
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSearchSubmit();
+                  if (e.key === 'Escape') clearSearch();
+                }}
+                placeholder="Search company or title..."
+                autoFocus
+                style={{
+                  padding: '6px 12px',
+                  border: 'none',
+                  outline: 'none',
+                  fontSize: '13px',
+                  backgroundColor: 'transparent',
+                  color: colors.calypso[900],
+                  width: '180px',
+                  fontFamily: 'inherit'
+                }}
+              />
+              <button
+                onClick={clearSearch}
+                style={{
+                  padding: '6px 8px',
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  borderLeft: `1px solid ${colors.calypso[400]}`,
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  color: colors.calypso[700],
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                setShowSearchInput(true);
+                setTimeout(() => searchInputRef.current?.focus(), 0);
+              }}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: 'transparent',
+                border: `2px solid ${colors.calypso[600]}`,
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                color: colors.calypso[900],
+                fontWeight: '500',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = colors.calypso[300];
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              Search
+            </button>
+          )}
           <button
             onClick={handleLogout}
             style={{
@@ -536,13 +627,13 @@ function Dashboard() {
             {/* Status Donut Chart with Stats */}
             <div style={{
               backgroundColor: colors.calypso[100],
-              padding: '28px 32px',
+              padding: '16px 20px',
               borderRadius: '12px',
               boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
               border: `1px solid ${colors.calypso[200]}`
             }}>
-              <div style={{ fontSize: '16px', fontWeight: '700', color: colors.textPrimary, marginBottom: '24px' }}>Application Status</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+              <div style={{ fontSize: '16px', fontWeight: '700', color: colors.textPrimary, marginBottom: '14px' }}>Application Status</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
                 <div style={{ flex: '0 0 260px', position: 'relative' }}>
                   <ResponsiveContainer width={260} height={260}>
                     <PieChart>
@@ -631,12 +722,12 @@ function Dashboard() {
             {/* Application Trends Chart with Toggle */}
             <div style={{
               backgroundColor: colors.calypso[100],
-              padding: '24px',
+              padding: '16px 20px',
               borderRadius: '12px',
               boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
               border: `1px solid ${colors.calypso[200]}`
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <div style={{ fontSize: '16px', fontWeight: '700', color: colors.textPrimary }}>Application Trends</div>
                 <div style={{ display: 'flex', gap: '4px', backgroundColor: colors.calypso[200], borderRadius: '8px', padding: '3px' }}>
                   {(['daily', 'weekly', 'monthly'] as const).map(view => (
@@ -667,12 +758,19 @@ function Dashboard() {
                   data={(() => {
                     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                     if (trendView === 'daily' && stats.daily_trends) {
-                      return Object.entries(stats.daily_trends)
+                      // Aggregate by local date from raw UTC timestamps
+                      const localCounts: Record<string, number> = {};
+                      for (const ts of Object.keys(stats.daily_trends)) {
+                        const d = new Date(ts);
+                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                        localCounts[key] = (localCounts[key] || 0) + 1;
+                      }
+                      return Object.entries(localCounts)
                         .sort(([a], [b]) => a.localeCompare(b))
                         .slice(-30)
                         .map(([day, count]) => {
-                          const d = new Date(day);
-                          return { label: `${monthNames[d.getMonth()]} ${d.getDate()}`, count };
+                          const [, m, d] = day.split('-');
+                          return { label: `${monthNames[parseInt(m) - 1]} ${parseInt(d)}`, count };
                         });
                     } else if (trendView === 'weekly' && stats.weekly_trends) {
                       return Object.entries(stats.weekly_trends)
@@ -906,12 +1004,14 @@ function Dashboard() {
 
                           {/* Dropdown content */}
                           <div style={{
-                            position: 'absolute',
-                            right: '0',
-                            ...(dropdownPosition === 'above' 
-                              ? { bottom: '100%', marginBottom: '8px' }
-                              : { top: '100%', marginTop: '8px' }
-                            ),
+                            position: 'fixed',
+                            ...(dropdownRect ? {
+                              right: window.innerWidth - dropdownRect.right,
+                              ...(dropdownPosition === 'above'
+                                ? { bottom: window.innerHeight - dropdownRect.top + 8 }
+                                : { top: dropdownRect.bottom + 8 }
+                              )
+                            } : {}),
                             backgroundColor: colors.bgLight,
                             border: `1px solid ${colors.calypso[200]}`,
                             borderRadius: '8px',

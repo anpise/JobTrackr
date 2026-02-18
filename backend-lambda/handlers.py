@@ -107,6 +107,9 @@ def handle_get_jobs(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Get status filter (optional)
         status_filter = params.get('status')
 
+        # Get search query (optional)
+        search_query = params.get('search')
+
         # Get pagination token (optional)
         last_key = None
         if params.get('last_key'):
@@ -119,7 +122,7 @@ def handle_get_jobs(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Continue without pagination token
 
         # Query database
-        result = get_user_jobs(user_id, limit, last_key, status_filter)
+        result = get_user_jobs(user_id, limit, last_key, status_filter, search_query)
 
         # Prepare response
         response_data = {

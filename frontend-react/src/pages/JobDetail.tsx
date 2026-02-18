@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../utils/auth';
 import { api, JobApplication } from '../services/api';
 import { colors } from '../styles/colors';
@@ -7,6 +7,7 @@ import { colors } from '../styles/colors';
 function JobDetail() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [job, setJob] = useState<JobApplication | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,11 +36,24 @@ function JobDetail() {
     try {
       setLoading(true);
       setError(null);
-      // For now, we'll get all jobs and find the specific one
-      // In a real app, you'd have a GET /api/jobs/{id} endpoint
-      const response = await api.getJobs(100); // Get more jobs to find the specific one
+
+      // Use job passed via router state if available
+      const stateJob = (location.state as { job?: JobApplication })?.job;
+      if (stateJob && stateJob.job_id === jobId) {
+        setJob(stateJob);
+        setEditForm({
+          status: stateJob.status,
+          notes: stateJob.notes || '',
+          resume_url: stateJob.resume_url || ''
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Fallback: fetch from API
+      const response = await api.getJobs(100);
       const foundJob = response.jobs.find(j => j.job_id === jobId);
-      
+
       if (foundJob) {
         setJob(foundJob);
         setEditForm({

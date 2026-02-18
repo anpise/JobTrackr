@@ -1,5 +1,7 @@
 // API service for JobTrackr backend
 
+import { encryptPayload, decryptResponse } from './crypto';
+
 const API_URL = import.meta.env.VITE_API_URL as string;
 
 export interface JobApplication {
@@ -97,10 +99,11 @@ class ApiService {
    */
   async ingestJob(request: IngestJobRequest): Promise<IngestJobResponse> {
     try {
+      const encryptedBody = await encryptPayload(request);
       const response = await fetch(`${API_URL}/api/jobs/ingest`, {
         method: 'POST',
         headers: this.getAuthHeader(),
-        body: JSON.stringify(request)
+        body: encryptedBody
       });
 
       if (!response.ok) {
@@ -108,11 +111,11 @@ class ApiService {
           this.handleAuthError();
           throw new Error('Authentication expired. Please login again.');
         }
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || `Failed to ingest job: ${response.status}`);
+        const error = await decryptResponse(await response.text()).catch(() => ({}));
+        throw new Error(error.error?.message || `Failed to ingest job: ${response.status}`);
       }
 
-      return await response.json();
+      return await decryptResponse(await response.text());
     } catch (error) {
       console.error('Error ingesting job:', error);
       throw error;
@@ -122,7 +125,7 @@ class ApiService {
   /**
    * Fetch all job applications for the authenticated user
    */
-  async getJobs(limit: number = 10, lastKey?: string, status?: string): Promise<GetJobsResponse> {
+  async getJobs(limit: number = 10, lastKey?: string, status?: string, search?: string): Promise<GetJobsResponse> {
     try {
       const params = new URLSearchParams();
       params.append('limit', limit.toString());
@@ -131,6 +134,9 @@ class ApiService {
       }
       if (status) {
         params.append('status', status);
+      }
+      if (search) {
+        params.append('search', search);
       }
 
       const response = await fetch(`${API_URL}/api/jobs?${params.toString()}`, {
@@ -146,7 +152,7 @@ class ApiService {
         throw new Error(`Failed to fetch jobs: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await decryptResponse(await response.text());
       return {
         jobs: data.jobs || [],
         count: data.count || 0,
@@ -163,10 +169,11 @@ class ApiService {
    */
   async updateJob(jobId: string, appliedTs: string, updates: UpdateJobRequest): Promise<void> {
     try {
+      const encryptedBody = await encryptPayload(updates);
       const response = await fetch(`${API_URL}/api/jobs/${jobId}?applied_ts=${encodeURIComponent(appliedTs)}`, {
         method: 'PUT',
         headers: this.getAuthHeader(),
-        body: JSON.stringify(updates)
+        body: encryptedBody
       });
 
       if (!response.ok) {
@@ -223,7 +230,7 @@ class ApiService {
         throw new Error(`Failed to fetch stats: ${response.status}`);
       }
 
-      return await response.json();
+      return await decryptResponse(await response.text());
     } catch (error) {
       console.error('Error fetching stats:', error);
       throw error;

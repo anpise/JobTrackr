@@ -32,6 +32,11 @@ Parameters:
     Type: String
     Description: Maximum tokens for LLM responses
     Default: '2000'
+  PayloadEncryptionKey:
+    Type: String
+    Description: Base64-encoded 256-bit key for AES-GCM payload encryption
+    NoEcho: true
+    Default: ''
 
 Globals:
   Function:
@@ -76,6 +81,8 @@ Resources:
           BEDROCK_MODEL_ID: !Ref BedrockModelId
           AWS_DEFAULT_REGION: us-east-1
           MAX_TOKENS: !Ref MaxTokens
+          PAYLOAD_ENCRYPTION_KEY: !Ref PayloadEncryptionKey
+          
       Events:
         JobIngest:
           Type: Api

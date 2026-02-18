@@ -164,7 +164,7 @@ def get_job(user_id: str, job_id: str, applied_ts: str) -> Optional[Dict[str, An
         return None
 
 
-def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, Any]] = None, status_filter: Optional[str] = None) -> Dict[str, Any]:
+def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, Any]] = None, status_filter: Optional[str] = None, search_query: Optional[str] = None) -> Dict[str, Any]:
     """
     Get jobs for a user with pagination (sorted by applied_ts descending)
 
@@ -173,6 +173,7 @@ def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, An
         limit: Maximum number of jobs to return (default: 10)
         last_key: Pagination token (LastEvaluatedKey from previous response)
         status_filter: Optional status to filter by (e.g. 'Applied', 'Interview')
+        search_query: Optional search string to match against company/title (case-insensitive)
 
     Returns:
         Dict with 'items' and optional 'last_key' for pagination
@@ -203,14 +204,26 @@ def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, An
         if last_key:
             query_params['ExclusiveStartKey'] = last_key
 
-        # When using FilterExpression, DynamoDB applies Limit before filtering.
-        # We need to loop until we collect enough matching items.
-        if status_filter:
+        # Search requires post-query filtering for case-insensitive matching
+        # DynamoDB contains() is case-sensitive, so we filter in Python
+        needs_loop = bool(status_filter) or bool(search_query)
+
+        if needs_loop:
+            search_lower = search_query.lower() if search_query else None
             items = []
             while len(items) < limit:
-                query_params['Limit'] = limit - len(items)
+                query_params['Limit'] = limit * 3 if search_query else (limit - len(items))
                 response = table.query(**query_params)
-                items.extend(response.get('Items', []))
+                batch = response.get('Items', [])
+
+                if search_lower:
+                    batch = [
+                        item for item in batch
+                        if search_lower in item.get('company', '').lower()
+                        or search_lower in item.get('title', '').lower()
+                    ]
+
+                items.extend(batch)
                 if 'LastEvaluatedKey' not in response:
                     break
                 query_params['ExclusiveStartKey'] = response['LastEvaluatedKey']
@@ -431,9 +444,8 @@ def get_user_job_stats(user_id: str) -> Dict[str, Any]:
                 except (ValueError, AttributeError):
                     pass
 
-                # Daily: YYYY-MM-DD (last 30 days only)
-                day_key = applied_ts[:10]
-                daily_trends[day_key] = daily_trends.get(day_key, 0) + 1
+                # Daily: collect raw timestamps for frontend local-time grouping
+                daily_trends[applied_ts] = 1
 
         return {
             'total_jobs': len(jobs),
