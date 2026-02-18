@@ -122,11 +122,17 @@ def put_job(item: Dict[str, Any]) -> bool:
         True if successful, False otherwise
     """
     try:
-        table.put_item(Item=item)
+        table.put_item(
+            Item=item,
+            ConditionExpression='attribute_not_exists(PK)'
+        )
         logger.info(f"Successfully inserted job: {item['job_id']} for user: {item['user_id']}")
         return True
     except ClientError as e:
-        logger.error(f"Failed to insert job into DynamoDB: {str(e)}", exc_info=True)
+        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            logger.warning(f"Job already exists: {item['job_id']} for user: {item['user_id']}")
+        else:
+            logger.error(f"Failed to insert job into DynamoDB: {str(e)}", exc_info=True)
         return False
     except Exception as e:
         logger.error(f"Unexpected error inserting job: {str(e)}", exc_info=True)
@@ -158,7 +164,7 @@ def get_job(user_id: str, job_id: str, applied_ts: str) -> Optional[Dict[str, An
         return None
 
 
-def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, Any]] = None, status_filter: Optional[str] = None, search_query: Optional[str] = None) -> Dict[str, Any]:
     """
     Get jobs for a user with pagination (sorted by applied_ts descending)
 
@@ -166,6 +172,8 @@ def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, An
         user_id: User identifier
         limit: Maximum number of jobs to return (default: 10)
         last_key: Pagination token (LastEvaluatedKey from previous response)
+        status_filter: Optional status to filter by (e.g. 'Applied', 'Interview')
+        search_query: Optional search string to match against company/title (case-insensitive)
 
     Returns:
         Dict with 'items' and optional 'last_key' for pagination
@@ -178,24 +186,59 @@ def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, An
                 ':sk_prefix': 'JOB#'
             },
             'ScanIndexForward': False,  # Descending order (newest first)
-            'Limit': limit
         }
+
+        # Add status filter if provided
+        if status_filter:
+            query_params['ExpressionAttributeNames'] = {'#status': 'status'}
+            if status_filter == 'Applied':
+                # "Applied" filter includes both "Applied" and "Captured" statuses
+                query_params['FilterExpression'] = '#status = :status1 OR #status = :status2'
+                query_params['ExpressionAttributeValues'][':status1'] = 'Applied'
+                query_params['ExpressionAttributeValues'][':status2'] = 'Captured'
+            else:
+                query_params['FilterExpression'] = '#status = :status'
+                query_params['ExpressionAttributeValues'][':status'] = status_filter
 
         # Add pagination token if provided
         if last_key:
             query_params['ExclusiveStartKey'] = last_key
 
-        response = table.query(**query_params)
+        # Search requires post-query filtering for case-insensitive matching
+        # DynamoDB contains() is case-sensitive, so we filter in Python
+        needs_loop = bool(status_filter) or bool(search_query)
 
-        result = {
-            'items': response.get('Items', [])
-        }
+        if needs_loop:
+            search_lower = search_query.lower() if search_query else None
+            items = []
+            while len(items) < limit:
+                query_params['Limit'] = limit * 3 if search_query else (limit - len(items))
+                response = table.query(**query_params)
+                batch = response.get('Items', [])
 
-        # Include pagination token if there are more results
-        if 'LastEvaluatedKey' in response:
-            result['last_key'] = response['LastEvaluatedKey']
+                if search_lower:
+                    batch = [
+                        item for item in batch
+                        if search_lower in item.get('company', '').lower()
+                        or search_lower in item.get('title', '').lower()
+                    ]
 
-        return result
+                items.extend(batch)
+                if 'LastEvaluatedKey' not in response:
+                    break
+                query_params['ExclusiveStartKey'] = response['LastEvaluatedKey']
+
+            result = {'items': items[:limit]}
+            if 'LastEvaluatedKey' in response and len(items) >= limit:
+                result['last_key'] = response['LastEvaluatedKey']
+            return result
+        else:
+            query_params['Limit'] = limit
+            response = table.query(**query_params)
+            result = {'items': response.get('Items', [])}
+            if 'LastEvaluatedKey' in response:
+                result['last_key'] = response['LastEvaluatedKey']
+            return result
     except ClientError as e:
         logger.error(f"Failed to query user jobs: {str(e)}", exc_info=True)
         return {'items': []}
@@ -228,83 +271,6 @@ def get_jobs_by_company(user_id: str, company: str, limit: int = 50) -> List[Dic
     except ClientError as e:
         logger.error(f"Failed to query jobs by company: {str(e)}", exc_info=True)
         return []
-
-
-def update_job_status(
-    user_id: str,
-    job_id: str,
-    applied_ts: str,
-    new_status: str
-) -> bool:
-    """
-    Update job status
-
-    Args:
-        user_id: User identifier
-        job_id: Job identifier
-        applied_ts: ISO timestamp
-        new_status: New status value
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        table.update_item(
-            Key={
-                'PK': f'USER#{user_id}',
-                'SK': f'JOB#{applied_ts}#{job_id}'
-            },
-            UpdateExpression='SET #status = :status, last_updated_ts = :updated',
-            ExpressionAttributeNames={
-                '#status': 'status'
-            },
-            ExpressionAttributeValues={
-                ':status': new_status,
-                ':updated': datetime.now(timezone.utc).isoformat()
-            }
-        )
-        logger.info(f"Updated job {job_id} status to {new_status}")
-        return True
-    except ClientError as e:
-        logger.error(f"Failed to update job status: {str(e)}", exc_info=True)
-        return False
-
-
-def update_job_resume(
-    user_id: str,
-    job_id: str,
-    applied_ts: str,
-    resume_url: str
-) -> bool:
-    """
-    Update job with resume URL
-
-    Args:
-        user_id: User identifier
-        job_id: Job identifier
-        applied_ts: ISO timestamp
-        resume_url: S3 URL of resume
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        table.update_item(
-            Key={
-                'PK': f'USER#{user_id}',
-                'SK': f'JOB#{applied_ts}#{job_id}'
-            },
-            UpdateExpression='SET resume_url = :resume, last_updated_ts = :updated',
-            ExpressionAttributeValues={
-                ':resume': resume_url,
-                ':updated': datetime.now(timezone.utc).isoformat()
-            }
-        )
-        logger.info(f"Updated job {job_id} with resume URL")
-        return True
-    except ClientError as e:
-        logger.error(f"Failed to update resume URL: {str(e)}", exc_info=True)
-        return False
 
 
 def update_job(
@@ -383,12 +349,16 @@ def delete_job(user_id: str, job_id: str, applied_ts: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        table.delete_item(
+        response = table.delete_item(
             Key={
                 'PK': f'USER#{user_id}',
                 'SK': f'JOB#{applied_ts}#{job_id}'
-            }
+            },
+            ReturnValues='ALL_OLD'
         )
+        if not response.get('Attributes'):
+            logger.warning(f"Attempted to delete non-existent job {job_id} for user {user_id}")
+            return False
         logger.info(f"Deleted job {job_id} for user {user_id}")
         return True
     except ClientError as e:
@@ -398,100 +368,95 @@ def delete_job(user_id: str, job_id: str, applied_ts: str) -> bool:
 
 def get_user_job_stats(user_id: str) -> Dict[str, Any]:
     """
-    Get job application statistics for a user
-    Optimized query that only fetches necessary fields for stats calculation
-    
-    Returns:
-        Dictionary containing various job statistics
+    Get job application statistics for a user.
+    Uses projection to minimize read costs.
     """
+    empty_stats = {
+        'total_jobs': 0,
+        'status_breakdown': {},
+        'company_breakdown': {},
+        'recent_activity': [],
+        'application_trends': {},
+        'weekly_trends': {},
+        'daily_trends': {}
+    }
+
     try:
         logger.info(f"Getting stats for user_id: {user_id}")
-        
-        # Query with projection to only get fields needed for stats
+
         response = table.query(
             KeyConditionExpression='PK = :pk AND begins_with(SK, :sk_prefix)',
-            ProjectionExpression='job_id, #status, company, #position, applied_ts, created_at',
+            ProjectionExpression='job_id, #status, company, title, applied_ts',
             ExpressionAttributeNames={
-                '#status': 'status',
-                '#position': 'position'
+                '#status': 'status'
             },
             ExpressionAttributeValues={
                 ':pk': f'USER#{user_id}',
                 ':sk_prefix': 'JOB#'
-            }
+            },
+            ScanIndexForward=False
         )
-        
-        logger.info(f"Query response: {response}")
-        logger.info(f"Items count: {len(response.get('Items', []))}")
-        
+
         jobs = response.get('Items', [])
-        
+        logger.info(f"Items count: {len(jobs)}")
+
         if not jobs:
-            return {
-                'total_jobs': 0,
-                'status_breakdown': {},
-                'company_breakdown': {},
-                'recent_activity': [],
-                'application_trends': {}
-            }
-        
-        # Calculate statistics
-        total_jobs = len(jobs)
-        status_breakdown = {}
-        company_breakdown = {}
+            return empty_stats
+
+        # Recent activity: first 10 are already newest-first (ScanIndexForward=False)
         recent_activity = []
-        
-        # Process each job
-        for job in jobs:
-            # Status breakdown
-            status = job.get('status', 'Unknown')
-            status_breakdown[status] = status_breakdown.get(status, 0) + 1
-            
-            # Company breakdown
-            company = job.get('company', 'Unknown')
-            company_breakdown[company] = company_breakdown.get(company, 0) + 1
-            
-            # Recent activity (last 10 jobs by applied_ts)
+        for job in jobs[:10]:
             recent_activity.append({
                 'job_id': job.get('job_id'),
-                'company': company,
-                'position': job.get('position', 'Unknown'),
-                'status': status,
+                'company': job.get('company', 'Unknown'),
+                'position': job.get('title', 'Unknown'),
+                'status': job.get('status', 'Unknown'),
                 'applied_ts': job.get('applied_ts'),
-                'created_at': job.get('created_at')
+                'created_at': job.get('applied_ts')
             })
-        
-        # Sort recent activity by applied_ts (most recent first)
-        recent_activity.sort(key=lambda x: x.get('applied_ts', ''), reverse=True)
-        recent_activity = recent_activity[:10]
-        
-        # Calculate application trends (jobs per month)
+
+        # Single pass for all aggregations
+        status_breakdown = {}
+        company_breakdown = {}
         application_trends = {}
+        weekly_trends = {}
+        daily_trends = {}
+
         for job in jobs:
+            status = job.get('status', 'Unknown')
+            status_breakdown[status] = status_breakdown.get(status, 0) + 1
+
+            company = job.get('company', 'Unknown')
+            company_breakdown[company] = company_breakdown.get(company, 0) + 1
+
             applied_ts = job.get('applied_ts', '')
-            if applied_ts:
-                # Extract year-month from timestamp
+            if applied_ts and len(applied_ts) >= 10:
+                # Monthly: YYYY-MM
+                year_month = applied_ts[:7]
+                application_trends[year_month] = application_trends.get(year_month, 0) + 1
+
+                # Weekly: ISO week YYYY-Wnn
                 try:
-                    # Assuming applied_ts is in format "2025-10-12T15:41:37.926992+00:00"
-                    year_month = applied_ts[:7]  # "2025-10"
-                    application_trends[year_month] = application_trends.get(year_month, 0) + 1
-                except:
-                    continue
-        
+                    dt = datetime.fromisoformat(applied_ts.replace('Z', '+00:00'))
+                    iso_year, iso_week, _ = dt.isocalendar()
+                    week_key = f"{iso_year}-W{iso_week:02d}"
+                    weekly_trends[week_key] = weekly_trends.get(week_key, 0) + 1
+                except (ValueError, AttributeError):
+                    pass
+
+                # Daily: collect raw timestamps for frontend local-time grouping
+                daily_trends[applied_ts] = 1
+
         return {
-            'total_jobs': total_jobs,
+            'total_jobs': len(jobs),
             'status_breakdown': status_breakdown,
             'company_breakdown': company_breakdown,
             'recent_activity': recent_activity,
-            'application_trends': application_trends
+            'application_trends': application_trends,
+            'weekly_trends': weekly_trends,
+            'daily_trends': daily_trends
         }
-        
+
     except ClientError as e:
         logger.error(f"Failed to get job stats: {str(e)}", exc_info=True)
-        return {
-            'total_jobs': 0,
-            'status_breakdown': {},
-            'company_breakdown': {},
-            'recent_activity': [],
-            'application_trends': {}
-        }
+        return empty_stats

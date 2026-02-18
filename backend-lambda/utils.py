@@ -4,27 +4,40 @@ Utility functions for the JobTrackr Lambda API
 
 import json
 import re
+import logging
 from datetime import datetime
 from urllib.parse import urlparse
 from typing import Dict, Any, Optional
+from crypto_utils import encrypt_payload, decrypt_payload
+
+logger = logging.getLogger(__name__)
 
 
 def parse_request_body(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
-    Parse JSON request body from Lambda event
-    Returns None if parsing fails
+    Parse JSON request body from Lambda event.
+    Attempts to decrypt if the body is an encrypted payload.
+    Returns None if parsing fails.
     """
     try:
         body = event.get('body')
         if not body:
             return None
-        
-        if isinstance(body, str):
-            return json.loads(body)
-        elif isinstance(body, dict):
+
+        if isinstance(body, dict):
             return body
-        else:
-            return None
+
+        if isinstance(body, str):
+            # Try to decrypt the body first (encrypted payload)
+            try:
+                decrypted = decrypt_payload(body)
+                return json.loads(decrypted)
+            except Exception:
+                # Not encrypted, try plain JSON
+                pass
+            return json.loads(body)
+
+        return None
     except json.JSONDecodeError:
         return None
 
@@ -56,10 +69,18 @@ def create_response(status_code: int, data: Dict[str, Any], cors_headers: bool =
     if 'success' not in response_body:
         response_body['success'] = status_code < 400
 
+    # Encrypt the response body
+    body_json = json.dumps(response_body)
+    try:
+        encrypted_body = encrypt_payload(body_json)
+    except Exception as e:
+        logger.error(f"Failed to encrypt response: {e}")
+        encrypted_body = body_json  # Fallback to plaintext if encryption fails
+
     return {
         'statusCode': status_code,
         'headers': headers,
-        'body': json.dumps(response_body)
+        'body': encrypted_body
     }
 
 

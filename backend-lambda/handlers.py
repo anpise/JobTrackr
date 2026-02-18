@@ -3,14 +3,34 @@ Request handlers for the JobTrackr Lambda API
 """
 
 import json
+import os
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from utils import create_response, create_error_response, create_success_response, parse_request_body, validate_url_input, sanitize_request_data
 from processor import process_job
 from db import get_user_jobs, delete_job, update_job, get_user_job_stats
 
 logger = logging.getLogger(__name__)
+
+
+def get_user_id(event: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract user_id from Cognito authorizer claims.
+    Falls back to LOCAL_DEV_USER_ID env var when LOCAL_DEV is set.
+    """
+    request_context = event.get('requestContext', {})
+    authorizer = request_context.get('authorizer', {})
+    if 'claims' in authorizer:
+        user_id = authorizer['claims'].get('sub')
+        if user_id:
+            return user_id
+
+    # Local dev fallback
+    if os.getenv('LOCAL_DEV') == 'true':
+        return os.getenv('LOCAL_DEV_USER_ID', 'local-test-user')
+
+    return None
 
 
 def handle_job_ingest(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -20,21 +40,8 @@ def handle_job_ingest(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Optional: resume_url
     """
     try:
-        # Extract user_id from Cognito authorizer context
-        user_id = None
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-
-        # Log for debugging
-        logger.info(f"Request context: {request_context}")
-        logger.info(f"Authorizer: {authorizer}")
-
-        # Get user_id from Cognito claims
-        if 'claims' in authorizer:
-            user_id = authorizer['claims'].get('sub')  # Cognito user ID
-
+        user_id = get_user_id(event)
         if not user_id:
-            logger.error(f"No user_id found. Full event: {event}")
             return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
 
         # Parse request body
@@ -83,15 +90,7 @@ def handle_get_jobs(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     User ID is extracted from Cognito authorizer
     """
     try:
-        # Extract user_id from Cognito authorizer context
-        user_id = None
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-
-        # Get user_id from Cognito claims
-        if 'claims' in authorizer:
-            user_id = authorizer['claims'].get('sub')  # Cognito user ID
-
+        user_id = get_user_id(event)
         if not user_id:
             return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
 
@@ -105,6 +104,12 @@ def handle_get_jobs(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if limit < 1:
             limit = 10
 
+        # Get status filter (optional)
+        status_filter = params.get('status')
+
+        # Get search query (optional)
+        search_query = params.get('search')
+
         # Get pagination token (optional)
         last_key = None
         if params.get('last_key'):
@@ -117,7 +122,7 @@ def handle_get_jobs(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Continue without pagination token
 
         # Query database
-        result = get_user_jobs(user_id, limit, last_key)
+        result = get_user_jobs(user_id, limit, last_key, status_filter, search_query)
 
         # Prepare response
         response_data = {
@@ -148,15 +153,7 @@ def handle_update_job(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Body: { "status": "...", "notes": "..." }
     """
     try:
-        # Extract user_id from Cognito authorizer context
-        user_id = None
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-
-        # Get user_id from Cognito claims
-        if 'claims' in authorizer:
-            user_id = authorizer['claims'].get('sub')
-
+        user_id = get_user_id(event)
         if not user_id:
             return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
 
@@ -214,15 +211,7 @@ def handle_delete_job(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Path: /api/jobs/{job_id}?applied_ts={timestamp}
     """
     try:
-        # Extract user_id from Cognito authorizer context
-        user_id = None
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-
-        # Get user_id from Cognito claims
-        if 'claims' in authorizer:
-            user_id = authorizer['claims'].get('sub')
-
+        user_id = get_user_id(event)
         if not user_id:
             return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
 
@@ -263,18 +252,7 @@ def handle_get_stats(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Uses dedicated optimized database query for stats
     """
     try:
-        # Extract user_id from Cognito authorizer context
-        user_id = None
-        request_context = event.get('requestContext', {})
-        authorizer = request_context.get('authorizer', {})
-
-        # Get user_id from Cognito claims
-        if 'claims' in authorizer:
-            user_id = authorizer['claims'].get('sub')  # Cognito user ID
-
-        logger.info(f"Stats request - user_id: {user_id}")
-        logger.info(f"Authorizer: {authorizer}")
-
+        user_id = get_user_id(event)
         if not user_id:
             return create_error_response(401, "Unauthorized - No user ID found", "UNAUTHORIZED")
 
