@@ -120,12 +120,15 @@ class ApiService {
   /**
    * Fetch all job applications for the authenticated user
    */
-  async getJobs(limit: number = 10, lastKey?: string): Promise<GetJobsResponse> {
+  async getJobs(limit: number = 10, lastKey?: string, status?: string): Promise<GetJobsResponse> {
     try {
       const params = new URLSearchParams();
       params.append('limit', limit.toString());
       if (lastKey) {
         params.append('last_key', lastKey);
+      }
+      if (status) {
+        params.append('status', status);
       }
 
       const response = await fetch(`${API_URL}/api/jobs?${params.toString()}`, {

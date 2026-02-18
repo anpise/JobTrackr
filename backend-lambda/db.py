@@ -164,7 +164,7 @@ def get_job(user_id: str, job_id: str, applied_ts: str) -> Optional[Dict[str, An
         return None
 
 
-def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, Any]] = None, status_filter: Optional[str] = None) -> Dict[str, Any]:
     """
     Get jobs for a user with pagination (sorted by applied_ts descending)
 
@@ -172,6 +172,7 @@ def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, An
         user_id: User identifier
         limit: Maximum number of jobs to return (default: 10)
         last_key: Pagination token (LastEvaluatedKey from previous response)
+        status_filter: Optional status to filter by (e.g. 'Applied', 'Interview')
 
     Returns:
         Dict with 'items' and optional 'last_key' for pagination
@@ -184,24 +185,47 @@ def get_user_jobs(user_id: str, limit: int = 10, last_key: Optional[Dict[str, An
                 ':sk_prefix': 'JOB#'
             },
             'ScanIndexForward': False,  # Descending order (newest first)
-            'Limit': limit
         }
+
+        # Add status filter if provided
+        if status_filter:
+            query_params['ExpressionAttributeNames'] = {'#status': 'status'}
+            if status_filter == 'Applied':
+                # "Applied" filter includes both "Applied" and "Captured" statuses
+                query_params['FilterExpression'] = '#status = :status1 OR #status = :status2'
+                query_params['ExpressionAttributeValues'][':status1'] = 'Applied'
+                query_params['ExpressionAttributeValues'][':status2'] = 'Captured'
+            else:
+                query_params['FilterExpression'] = '#status = :status'
+                query_params['ExpressionAttributeValues'][':status'] = status_filter
 
         # Add pagination token if provided
         if last_key:
             query_params['ExclusiveStartKey'] = last_key
 
-        response = table.query(**query_params)
+        # When using FilterExpression, DynamoDB applies Limit before filtering.
+        # We need to loop until we collect enough matching items.
+        if status_filter:
+            items = []
+            while len(items) < limit:
+                query_params['Limit'] = limit - len(items)
+                response = table.query(**query_params)
+                items.extend(response.get('Items', []))
+                if 'LastEvaluatedKey' not in response:
+                    break
+                query_params['ExclusiveStartKey'] = response['LastEvaluatedKey']
 
-        result = {
-            'items': response.get('Items', [])
-        }
-
-        # Include pagination token if there are more results
-        if 'LastEvaluatedKey' in response:
-            result['last_key'] = response['LastEvaluatedKey']
-
-        return result
+            result = {'items': items[:limit]}
+            if 'LastEvaluatedKey' in response and len(items) >= limit:
+                result['last_key'] = response['LastEvaluatedKey']
+            return result
+        else:
+            query_params['Limit'] = limit
+            response = table.query(**query_params)
+            result = {'items': response.get('Items', [])}
+            if 'LastEvaluatedKey' in response:
+                result['last_key'] = response['LastEvaluatedKey']
+            return result
     except ClientError as e:
         logger.error(f"Failed to query user jobs: {str(e)}", exc_info=True)
         return {'items': []}

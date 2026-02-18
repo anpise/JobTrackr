@@ -39,21 +39,34 @@ function Dashboard() {
     fetchStats();
   }, []);
 
-  const fetchJobs = async (pageIndex: number) => {
+  const fetchJobs = async (pageIndex: number, status?: string, resetPagination?: boolean) => {
     try {
       setLoading(true);
       setError(null);
-      const lastKey = pageTokens[pageIndex];
-      const response = await api.getJobs(10, lastKey);
+      const lastKey = resetPagination ? undefined : pageTokens[pageIndex];
+      const statusParam = status !== undefined ? status : filterStatus;
+      const apiStatus = statusParam === 'All' ? undefined : statusParam;
+      const response = await api.getJobs(25, lastKey, apiStatus);
       setJobs(response.jobs);
       setCurrentPage(pageIndex);
 
-      // If there's a next page token and we haven't stored it yet
-      if (response.next_page_token && !pageTokens[pageIndex + 1]) {
-        setPageTokens(prev => [...prev, response.next_page_token]);
-        setTotalPages(pageIndex + 2);
-      } else if (!response.next_page_token) {
-        setTotalPages(pageIndex + 1);
+      if (resetPagination) {
+        // Fresh filter — build new token list from scratch
+        if (response.next_page_token) {
+          setPageTokens([undefined, response.next_page_token]);
+          setTotalPages(2);
+        } else {
+          setPageTokens([undefined]);
+          setTotalPages(1);
+        }
+      } else {
+        // Normal pagination — append token if new
+        if (response.next_page_token && !pageTokens[pageIndex + 1]) {
+          setPageTokens(prev => [...prev, response.next_page_token]);
+          setTotalPages(pageIndex + 2);
+        } else if (!response.next_page_token) {
+          setTotalPages(pageIndex + 1);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch jobs:', err);
@@ -177,11 +190,8 @@ function Dashboard() {
     auth.logout();
   };
 
-  const filteredJobs = filterStatus === 'All'
-    ? jobs
-    : filterStatus === 'Applied'
-    ? jobs.filter(job => job.status === 'Applied' || job.status === 'Captured')
-    : jobs.filter(job => job.status === filterStatus);
+  // Filtering is now done server-side via the API status parameter
+  const filteredJobs = jobs;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -575,7 +585,10 @@ function Dashboard() {
           {['All', 'Applied', 'Interview', 'Offer', 'Rejected'].map(status => (
             <button
               key={status}
-              onClick={() => setFilterStatus(status)}
+              onClick={() => {
+                setFilterStatus(status);
+                fetchJobs(0, status, true);
+              }}
               style={{
                 padding: '6px 12px',
                 backgroundColor: filterStatus === status ? colors.primary : colors.calypso[200],
@@ -1237,7 +1250,7 @@ function Dashboard() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {totalPages > 1 && jobs.length > 0 && (
           <div style={{
             display: 'flex',
             justifyContent: 'center',
