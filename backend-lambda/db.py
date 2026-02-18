@@ -363,7 +363,9 @@ def get_user_job_stats(user_id: str) -> Dict[str, Any]:
         'status_breakdown': {},
         'company_breakdown': {},
         'recent_activity': [],
-        'application_trends': {}
+        'application_trends': {},
+        'weekly_trends': {},
+        'daily_trends': {}
     }
 
     try:
@@ -404,6 +406,8 @@ def get_user_job_stats(user_id: str) -> Dict[str, Any]:
         status_breakdown = {}
         company_breakdown = {}
         application_trends = {}
+        weekly_trends = {}
+        daily_trends = {}
 
         for job in jobs:
             status = job.get('status', 'Unknown')
@@ -413,16 +417,32 @@ def get_user_job_stats(user_id: str) -> Dict[str, Any]:
             company_breakdown[company] = company_breakdown.get(company, 0) + 1
 
             applied_ts = job.get('applied_ts', '')
-            if applied_ts and len(applied_ts) >= 7:
+            if applied_ts and len(applied_ts) >= 10:
+                # Monthly: YYYY-MM
                 year_month = applied_ts[:7]
                 application_trends[year_month] = application_trends.get(year_month, 0) + 1
+
+                # Weekly: ISO week YYYY-Wnn
+                try:
+                    dt = datetime.fromisoformat(applied_ts.replace('Z', '+00:00'))
+                    iso_year, iso_week, _ = dt.isocalendar()
+                    week_key = f"{iso_year}-W{iso_week:02d}"
+                    weekly_trends[week_key] = weekly_trends.get(week_key, 0) + 1
+                except (ValueError, AttributeError):
+                    pass
+
+                # Daily: YYYY-MM-DD (last 30 days only)
+                day_key = applied_ts[:10]
+                daily_trends[day_key] = daily_trends.get(day_key, 0) + 1
 
         return {
             'total_jobs': len(jobs),
             'status_breakdown': status_breakdown,
             'company_breakdown': company_breakdown,
             'recent_activity': recent_activity,
-            'application_trends': application_trends
+            'application_trends': application_trends,
+            'weekly_trends': weekly_trends,
+            'daily_trends': daily_trends
         }
 
     except ClientError as e:

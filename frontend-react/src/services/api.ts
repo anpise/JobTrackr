@@ -61,6 +61,8 @@ export interface JobStats {
     created_at: string;
   }>;
   application_trends: Record<string, number>;
+  weekly_trends: Record<string, number>;
+  daily_trends: Record<string, number>;
 }
 
 class ApiService {

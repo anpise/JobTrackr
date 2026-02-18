@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from '../utils/auth';
 import { api, JobApplication, JobStats } from '../services/api';
 import { colors } from '../styles/colors';
+import { PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ function Dashboard() {
     notes: '',
     resume_url: ''
   });
+  const [trendView, setTrendView] = useState<'monthly' | 'weekly' | 'daily'>('monthly');
 
   // Fetch jobs and stats on component mount
   useEffect(() => {
@@ -35,8 +37,8 @@ function Dashboard() {
       return;
     }
     
-    fetchJobs(0);
     fetchStats();
+    fetchJobs(0);
   }, []);
 
   const fetchJobs = async (pageIndex: number, status?: string, resetPagination?: boolean) => {
@@ -219,7 +221,7 @@ function Dashboard() {
     rejected: jobs.filter(j => j.status === 'Rejected').length
   };
 
-  if (loading) {
+  if (loading && !stats) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -295,22 +297,22 @@ function Dashboard() {
           margin: '0 auto',
           padding: '16px 12px'
         }}>
-          {/* Stats Skeleton */}
+          {/* Charts Skeleton */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '12px',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+            gap: '16px',
             marginBottom: '24px'
           }}>
-            {[1, 2, 3, 4].map(i => (
+            {[1, 2].map(i => (
               <div key={i} style={{
                 background: `linear-gradient(90deg, ${colors.calypso[200]} 0%, ${colors.calypso[100]} 50%, ${colors.calypso[200]} 100%)`,
                 backgroundSize: '1000px 100%',
                 animation: 'shimmer 2s infinite linear',
-                padding: '20px',
+                padding: '24px',
                 borderRadius: '12px',
-                height: '100px',
-                border: `2px solid ${colors.calypso[200]}`
+                height: '300px',
+                border: `1px solid ${colors.calypso[200]}`
               }}></div>
             ))}
           </div>
@@ -421,6 +423,10 @@ function Dashboard() {
     }}>
       <style>
         {`
+          @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+          }
           @media (max-width: 768px) {
             .mobile-hidden { display: none !important; }
             .desktop-table { display: none !important; }
@@ -519,54 +525,183 @@ function Dashboard() {
         margin: '0 auto',
         padding: '16px 12px'
       }}>
-        {/* Stats */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-          gap: '12px',
-          marginBottom: '24px'
-        }}>
+        {/* Visualizations */}
+        {stats && (
           <div style={{
-            backgroundColor: colors.calypso[100],
-            padding: '20px 16px',
-            borderRadius: '12px',
-            boxShadow: `0 1px 3px rgba(0, 0, 0, 0.1)`,
-            border: `1px solid ${colors.calypso[200]}`
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+            gap: '16px',
+            marginBottom: '24px'
           }}>
-            <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Total Applications</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{displayStats.total}</div>
+            {/* Status Donut Chart with Stats */}
+            <div style={{
+              backgroundColor: colors.calypso[100],
+              padding: '28px 32px',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              border: `1px solid ${colors.calypso[200]}`
+            }}>
+              <div style={{ fontSize: '16px', fontWeight: '700', color: colors.textPrimary, marginBottom: '24px' }}>Application Status</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+                <div style={{ flex: '0 0 260px', position: 'relative' }}>
+                  <ResponsiveContainer width={260} height={260}>
+                    <PieChart>
+                      <Pie
+                        data={(() => {
+                          const breakdown = { ...stats.status_breakdown };
+                          const applied = (breakdown['Applied'] || 0) + (breakdown['Captured'] || 0);
+                          const data = [];
+                          if (applied > 0) data.push({ name: 'Applied', value: applied });
+                          if (breakdown['Interview']) data.push({ name: 'Interview', value: breakdown['Interview'] });
+                          if (breakdown['Offer']) data.push({ name: 'Offer', value: breakdown['Offer'] });
+                          if (breakdown['Rejected']) data.push({ name: 'Rejected', value: breakdown['Rejected'] });
+                          return data;
+                        })()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={65}
+                        outerRadius={110}
+                        paddingAngle={0}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {(() => {
+                          const statusColors: Record<string, string> = {
+                            'Applied': colors.primary,
+                            'Interview': colors.warning,
+                            'Offer': colors.success,
+                            'Rejected': colors.error
+                          };
+                          const breakdown = { ...stats.status_breakdown };
+                          const applied = (breakdown['Applied'] || 0) + (breakdown['Captured'] || 0);
+                          const entries = [];
+                          if (applied > 0) entries.push('Applied');
+                          if (breakdown['Interview']) entries.push('Interview');
+                          if (breakdown['Offer']) entries.push('Offer');
+                          if (breakdown['Rejected']) entries.push('Rejected');
+                          return entries.map((status, index) => (
+                            <Cell key={index} fill={statusColors[status]} />
+                          ));
+                        })()}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: colors.calypso[50],
+                          border: `1px solid ${colors.calypso[200]}`,
+                          borderRadius: '8px',
+                          fontSize: '13px'
+                        }}
+                        offset={20}
+                        allowEscapeViewBox={{ x: true, y: true }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  {/* Total count in center of donut */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    textAlign: 'center',
+                    pointerEvents: 'none'
+                  }}>
+                    <div style={{ fontSize: '36px', fontWeight: '800', color: colors.textPrimary, lineHeight: 1 }}>{displayStats.total}</div>
+                    <div style={{ fontSize: '14px', color: colors.textLight, fontWeight: '600', marginTop: '4px' }}>Total</div>
+                  </div>
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[
+                    { label: 'Applied', value: displayStats.applied, color: colors.primary },
+                    { label: 'Interview', value: displayStats.interview, color: colors.warning },
+                    { label: 'Offer', value: displayStats.offer, color: colors.success },
+                    { label: 'Rejected', value: displayStats.rejected, color: colors.error }
+                  ].map(item => (
+                    <div key={item.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', backgroundColor: `${item.color}08`, borderRadius: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: item.color }} />
+                        <span style={{ fontSize: '14px', color: colors.textSecondary, fontWeight: '500' }}>{item.label}</span>
+                      </div>
+                      <span style={{ fontSize: '18px', fontWeight: '700', color: colors.textPrimary }}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Application Trends Chart with Toggle */}
+            <div style={{
+              backgroundColor: colors.calypso[100],
+              padding: '24px',
+              borderRadius: '12px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              border: `1px solid ${colors.calypso[200]}`
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: colors.textPrimary }}>Application Trends</div>
+                <div style={{ display: 'flex', gap: '4px', backgroundColor: colors.calypso[200], borderRadius: '8px', padding: '3px' }}>
+                  {(['daily', 'weekly', 'monthly'] as const).map(view => (
+                    <button
+                      key={view}
+                      onClick={() => setTrendView(view)}
+                      style={{
+                        padding: '5px 12px',
+                        backgroundColor: trendView === view ? colors.primary : 'transparent',
+                        color: trendView === view ? colors.calypso[50] : colors.textSecondary,
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        transition: 'all 0.2s',
+                        textTransform: 'capitalize'
+                      }}
+                    >
+                      {view}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <ResponsiveContainer width="100%" height={250}>
+                <AreaChart
+                  data={(() => {
+                    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    if (trendView === 'daily' && stats.daily_trends) {
+                      return Object.entries(stats.daily_trends)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .slice(-30)
+                        .map(([day, count]) => {
+                          const d = new Date(day);
+                          return { label: `${monthNames[d.getMonth()]} ${d.getDate()}`, count };
+                        });
+                    } else if (trendView === 'weekly' && stats.weekly_trends) {
+                      return Object.entries(stats.weekly_trends)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .slice(-12)
+                        .map(([week, count]) => {
+                          const [year, w] = week.split('-W');
+                          return { label: `W${w} '${year.slice(2)}`, count };
+                        });
+                    } else {
+                      return Object.entries(stats.application_trends)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([month, count]) => {
+                          const [year, m] = month.split('-');
+                          return { label: `${monthNames[parseInt(m) - 1]} '${year.slice(2)}`, count };
+                        });
+                    }
+                  })()}
+                  margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                >
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: colors.textSecondary }} axisLine={{ stroke: colors.calypso[300] }} tickLine={false} interval="preserveStartEnd" padding={{ left: 15, right: 10 }} />
+                  <YAxis tick={{ fontSize: 12, fill: colors.textSecondary }} axisLine={{ stroke: colors.calypso[300] }} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={{ backgroundColor: colors.calypso[50], border: `1px solid ${colors.calypso[200]}`, borderRadius: '8px', fontSize: '13px' }} />
+                  <Area type="monotone" dataKey="count" stroke={colors.primary} fill={`${colors.primary}30`} strokeWidth={2} name="Applications" dot={{ fill: colors.primary, r: 3 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div style={{
-            backgroundColor: colors.calypso[100],
-            padding: '20px 16px',
-            borderRadius: '12px',
-            boxShadow: `0 1px 3px rgba(0, 0, 0, 0.1)`,
-            border: `1px solid ${colors.calypso[200]}`
-          }}>
-            <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Applied</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{displayStats.applied}</div>
-          </div>
-          <div style={{
-            backgroundColor: colors.calypso[100],
-            padding: '20px 16px',
-            borderRadius: '12px',
-            boxShadow: `0 1px 3px rgba(0, 0, 0, 0.1)`,
-            border: `1px solid ${colors.calypso[200]}`
-          }}>
-            <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Interview</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{displayStats.interview}</div>
-          </div>
-          <div style={{
-            backgroundColor: colors.calypso[100],
-            padding: '20px 16px',
-            borderRadius: '12px',
-            boxShadow: `0 1px 3px rgba(0, 0, 0, 0.1)`,
-            border: `1px solid ${colors.calypso[200]}`
-          }}>
-            <div style={{ fontSize: '13px', color: colors.textLight, marginBottom: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Offers</div>
-            <div style={{ fontSize: '32px', fontWeight: '700', color: colors.textPrimary, lineHeight: '1' }}>{displayStats.offer}</div>
-          </div>
-        </div>
+        )}
 
         {/* Filters */}
         <div style={{
@@ -627,7 +762,29 @@ function Dashboard() {
           border: `2px solid ${colors.calypso[200]}`,
           overflow: 'auto'
         }}>
-          {filteredJobs.length === 0 ? (
+          {loading ? (
+            <div style={{ padding: '40px 24px' }}>
+              {[1, 2, 3, 4, 5].map(row => (
+                <div key={row} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1.5fr 2fr 1.5fr 1fr 1fr 1fr 2fr',
+                  gap: '16px',
+                  padding: '12px 0',
+                  borderBottom: row < 5 ? `1px solid ${colors.calypso[200]}` : 'none'
+                }}>
+                  {[1, 2, 3, 4, 5, 6, 7].map(col => (
+                    <div key={col} style={{
+                      height: '16px',
+                      background: `linear-gradient(90deg, ${colors.calypso[100]} 0%, ${colors.calypso[200]} 50%, ${colors.calypso[100]} 100%)`,
+                      backgroundSize: '1000px 100%',
+                      animation: 'shimmer 2s infinite linear',
+                      borderRadius: '4px'
+                    }}></div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : filteredJobs.length === 0 ? (
             <div style={{
               padding: '60px 24px',
               textAlign: 'center',
@@ -926,7 +1083,20 @@ function Dashboard() {
 
         {/* Jobs List - Mobile Cards */}
         <div className="mobile-cards" style={{ display: 'none' }}>
-          {filteredJobs.length === 0 ? (
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{
+                  background: `linear-gradient(90deg, ${colors.calypso[100]} 0%, ${colors.calypso[200]} 50%, ${colors.calypso[100]} 100%)`,
+                  backgroundSize: '1000px 100%',
+                  animation: 'shimmer 2s infinite linear',
+                  borderRadius: '12px',
+                  height: '140px',
+                  border: `1px solid ${colors.calypso[200]}`
+                }}></div>
+              ))}
+            </div>
+          ) : filteredJobs.length === 0 ? (
             <div style={{
               padding: '60px 24px',
               textAlign: 'center',
@@ -1250,7 +1420,7 @@ function Dashboard() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && jobs.length > 0 && (
+        {!loading && totalPages > 1 && jobs.length > 0 && (
           <div style={{
             display: 'flex',
             justifyContent: 'center',
